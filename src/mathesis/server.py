@@ -1,7 +1,7 @@
 """HTTP API used by the userscript.
 
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
-              Header X-Mathesis-Kind: "transcript" (default, gets a summary); any other kind ("quiz", "quiz-review") is saved as is
+              Header X-Mathesis-Kind: "transcript" (default, gets a summary); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
 """
@@ -92,6 +92,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """X-Mathesis-Kind: "transcript" (default) is summarized; "quiz" is only saved."""
         target = target_path(x_file_path)
         kind = (x_mathesis_kind or "transcript").strip().lower()
+        if kind == "raw" and target.suffix != ".html":
+            raise ApiError(400, "raw saves must use an .html path")
         content = await request.body()
         try:
             target.parent.mkdir(parents=True, exist_ok=True)

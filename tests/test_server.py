@@ -100,3 +100,19 @@ def test_userscripts_are_served_and_path_traversal_is_refused(tmp_path):
         assert c.get("/userscript/missing.user.js").status_code == 404
         assert c.get("/userscript/..%2Fsecret.user.js").status_code == 404
         assert c.get("/userscript/a.txt").status_code == 404
+
+
+def test_raw_page_is_saved_as_html_and_never_summarized(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(server, "write_summary", lambda content, file, settings: calls.append(file))
+    monkeypatch.setattr("mathesis.ollama.OllamaClient.check_model", lambda self: (True, "ok"))
+    app = server.create_app(Settings(root=tmp_path.resolve(), summarize=True, notify=False))
+    html = "<!DOCTYPE html>\n<html><body>Ünïcode page</body></html>"
+    with TestClient(app) as c:
+        r = c.post("/write", content=html.encode(), headers={
+            "X-File-Path": "Udemy/Course/03-Odd lesson.raw.html", "X-Mathesis-Kind": "raw"})
+        assert r.status_code == 200 and r.json()["kind"] == "raw"
+        assert (tmp_path / "Udemy/Course/03-Odd lesson.raw.html").read_text(encoding="utf-8") == html
+        bad = c.post("/write", content=b"x", headers={"X-File-Path": "Udemy/Course/x.md", "X-Mathesis-Kind": "raw"})
+        assert bad.status_code == 400 and not (tmp_path / "Udemy/Course/x.md").exists()
+    assert calls == []

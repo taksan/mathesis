@@ -73,6 +73,16 @@
     return paragraphs.join('\n\n');
   }
 
+  // Nothing recognisable on the page: the click handler saves the whole page HTML instead (kind "raw", no summary).
+  const RAW = Symbol('raw');
+  function rawPathToWrite() {
+    try {
+      return computePathToWrite().replace(/\.md$/, '.raw.html');
+    } catch (e) { // not even the title/breadcrumb could be read: name it after the URL
+      return `${BASE_DIR}/_raw/${normalizeName(decodeURIComponent(location.pathname).replace(/\//g, ' '))}.raw.html`;
+    }
+  }
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // Opens the transcript panel when needed, reads it, and closes it again if we opened it.
@@ -98,10 +108,7 @@
     if (isQuizReview()) return getReview();
     const lines = await readTranscriptLines();
     const body = formatTranscript(lines);
-    if (!body) {
-      alert('Transcript not found (is this a video lesson with a transcript?)');
-      return null;
-    }
+    if (!body) return RAW;
     return `# ${lessonFileName().title}\n\n${body}\n`;
   }
 
@@ -281,24 +288,31 @@
   }
 
   button.addEventListener('click', async () => {
+    let kind = isQuizReview() ? 'quiz-review' : 'transcript';
+    let text = await getTranscript();
     let filePath;
-    try {
-      filePath = computePathToWrite();
-    } catch (e) {
-      console.error(e);
-      alert('Could not compute file path: ' + e.message);
+    if (text === RAW) {
+      kind = 'raw';
+      text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      filePath = rawPathToWrite();
+    } else if (!text) {
       return;
+    } else {
+      try {
+        filePath = computePathToWrite();
+      } catch (e) {
+        console.error(e);
+        alert('Could not compute file path: ' + e.message);
+        return;
+      }
     }
-    const kind = isQuizReview() ? 'quiz-review' : 'transcript';
-    const transcription = await getTranscript();
-    if (!transcription) return;
 
-    navigator.clipboard.writeText(transcription).catch((error) => alert('Could not copy text to clipboard: ' + error));
+    navigator.clipboard.writeText(text).catch((error) => alert('Could not copy text to clipboard: ' + error));
 
     fetch(`${SERVER}/write`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain', 'X-File-Path': filePath, 'X-Mathesis-Kind': kind },
-      body: transcription,
+      body: text,
     })
       .then((response) => {
         if (!response.ok) throw new Error('Network response was not ok ' + response.statusText);
@@ -306,12 +320,13 @@
       })
       .then((data) => {
         console.log('[Mathesis] saved', data);
-        setButtonState('saved', false);
-        alert(kind === 'quiz-review' ? 'Incorrect questions saved!' : 'Transcript sent successfully!');
+        if (kind !== 'raw') setButtonState('saved', false);
+        alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
+          : kind === 'quiz-review' ? 'Incorrect questions saved!' : 'Transcript sent successfully!');
       })
       .catch((error) => {
         console.error('Error:', error);
-        alert('Could not send transcript: ' + error);
+        alert('Could not send: ' + error);
       });
   });
 

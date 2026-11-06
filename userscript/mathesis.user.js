@@ -108,13 +108,20 @@
     return lines.join('\n');
   }
 
+  // Nothing recognisable on the page: the click handler saves the whole page HTML instead (kind "raw", no summary).
+  const RAW = Symbol('raw');
+  function rawPathToWrite() {
+    try {
+      return computePathToWrite().replace(/\.md$/, '.raw.html');
+    } catch (e) { // not even the title/breadcrumb could be read: name it after the URL
+      return `${BASE_DIR}/_raw/${normalizeName(decodeURIComponent(location.pathname).replace(/\//g, ' '))}.raw.html`;
+    }
+  }
+
   function getQuiz() {
     const quiz = document.querySelector('ql-quiz');
     const version = readJsonAttr(quiz, 'quizversion');
-    if (!version || !(version.quizItems || []).length) {
-      alert('Quiz questions not found');
-      return null;
-    }
+    if (!version || !(version.quizItems || []).length) return RAW;
     const menu = document.querySelector('ql-contents-menu');
     const title = (menu && menu.getAttribute('selectedcontenttitle')) || 'Quiz';
     return formatQuiz(version, readJsonAttr(quiz, 'quizresponse'), title);
@@ -131,13 +138,10 @@
         const body = formatTranscript(transcript);
         return title ? `# ${title}\n\n${body}\n` : body + '\n';
       }
-      alert('Video transcript not found');
-      return null;
+      return RAW;
     }
     const labInstructions = document.querySelector('.lab-content-container');
-    if (labInstructions) return labInstructions.innerText;
-    alert('Nothing found');
-    return null;
+    return labInstructions ? labInstructions.innerText : RAW;
   }
 
   const style = document.createElement('style');
@@ -193,30 +197,33 @@
   }
 
   button.addEventListener('click', () => {
-    const transcription = getTranscript();
-    if (!transcription) return;
+    let kind = isQuiz() ? 'quiz' : 'transcript';
+    let text = getTranscript();
+    let filePath;
+    if (text === RAW) {
+      kind = 'raw';
+      text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      filePath = rawPathToWrite();
+    } else if (!text) {
+      return;
+    } else {
+      try {
+        filePath = computePathToWrite();
+      } catch (e) {
+        console.error(e);
+        alert('Could not compute file path: ' + e.message);
+        return;
+      }
+    }
 
-    navigator.clipboard.writeText(transcription)
+    navigator.clipboard.writeText(text)
       .then(() => console.log('Text copied'))
       .catch((error) => alert('Could not copy text to clipboard: ' + error));
 
-    let filePath;
-    try {
-      filePath = computePathToWrite();
-    } catch (e) {
-      console.error(e);
-      alert('Could not compute file path: ' + e.message);
-      return;
-    }
-
     fetch('http://127.0.0.1:5000/write', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-        'X-File-Path': filePath,
-        'X-Mathesis-Kind': isQuiz() ? 'quiz' : 'transcript',
-      },
-      body: transcription,
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': filePath, 'X-Mathesis-Kind': kind },
+      body: text,
     })
       .then((response) => {
         if (!response.ok) throw new Error('Network response was not ok ' + response.statusText);
@@ -224,12 +231,13 @@
       })
       .then((data) => {
         console.log('Success:', data);
-        setButtonState('saved', false);
-        alert(isQuiz() ? 'Quiz saved!' : 'Transcript sent successfully!');
+        if (kind !== 'raw') setButtonState('saved', false);
+        alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
+          : kind === 'quiz' ? 'Quiz saved!' : 'Transcript sent successfully!');
       })
       .catch((error) => {
         console.error('Error:', error);
-        alert('Could not send transcript: ' + error);
+        alert('Could not send: ' + error);
       });
   });
 
