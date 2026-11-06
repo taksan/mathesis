@@ -1,0 +1,7 @@
+Learning path (the certification being studied): {learning_path}
+Course: {course}
+Lesson: {lesson}
+
+Transcript:
+
+{content}

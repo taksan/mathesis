@@ -1,0 +1,594 @@
+{
+  "_doc": "Ground truth per lesson, written by hand from the transcript (independent of any prompt). Each fact passes if EVERY regex in its list matches the summary (case-insensitive, dotall). noise = anecdotes that should not take up space. tech_expected = products that must appear in the Technologies section; tech_forbidden = concepts/practices that must NOT be listed as technologies.",
+  "root": "/home/takeuchi/projects/obsidian-takvault/_study_roadmap/Google Skills/Professional Cloud DevOps Engineer Certification",
+  "lessons": {
+    "13-slos": {
+      "split": "tune",
+      "file": "Developing a Google SRE Culture/13-SLOs and error budgets.md",
+      "facts": [
+        [
+          "error budget = the unreliability/downtime you are willing to tolerate",
+          [
+            "error budget",
+            "tolerat|willing|allowed|acceptable"
+          ]
+        ],
+        [
+          "100% reliability is the wrong target (slows feature releases)",
+          [
+            "100\\s?%",
+            "slow|wrong|not (the |a )?(right|goal|realistic)|unrealistic"
+          ]
+        ],
+        [
+          "while error budget remains / uptime above target, you can release features",
+          [
+            "budget remain|remaining|above (the |your )?target",
+            "releas|feature|push"
+          ]
+        ],
+        [
+          "budget can be spent on planned downtime, risky experiments, hardware/network failures",
+          [
+            "planned downtime",
+            "experiment",
+            "hardware|network"
+          ]
+        ],
+        [
+          "SLO = numerical reliability target agreed by stakeholders",
+          [
+            "SLO",
+            "target",
+            "agree|stakeholder"
+          ]
+        ],
+        [
+          "SLOs are set just short of 100% (99.9%, three nines)",
+          [
+            "99\\.9|three nines"
+          ]
+        ],
+        [
+          "SLI formula: good events / valid events x 100%",
+          [
+            "good events",
+            "valid events"
+          ]
+        ],
+        [
+          "SLI ranges 0%-100%",
+          [
+            "0\\s?%?\\s*(to|-|–)\\s*100"
+          ]
+        ],
+        [
+          "SLIs map to user expectations: latency, correctness, freshness, throughput",
+          [
+            "latency",
+            "freshness|correctness|throughput"
+          ]
+        ],
+        [
+          "SLO is the target for SLIs aggregated over time",
+          [
+            "SLO",
+            "SLI",
+            "aggregat|over time"
+          ]
+        ],
+        [
+          "SLA = promise to customers with a consequence (e.g. refund) if SLOs are missed",
+          [
+            "SLA",
+            "refund|consequence|penalt"
+          ]
+        ],
+        [
+          "measure reliability as good interactions/total interactions, not good time/total time",
+          [
+            "interaction",
+            "time"
+          ]
+        ],
+        [
+          "being well within SLO = can move faster; SLOs show how fast is too fast",
+          [
+            "within (the |your )?SLO|move faster|how fast|velocity"
+          ]
+        ],
+        [
+          "SLOs + error budgets create shared responsibility between dev and ops (break silos)",
+          [
+            "shared (responsibility|ownership)|share (responsibility|ownership)"
+          ]
+        ]
+      ],
+      "noise": [],
+      "tech_expected": [],
+      "tech_forbidden": [
+        "SLO",
+        "SLI",
+        "SLA",
+        "SRE",
+        "error budget",
+        "DevOps"
+      ]
+    },
+    "14-vision": {
+      "split": "tune",
+      "file": "Developing a Google SRE Culture/14-Share vision and knowledge.md",
+      "facts": [
+        [
+          "three focus areas: unified vision, collaboration/communication, knowledge sharing",
+          [
+            "vision",
+            "collaborat",
+            "knowledge[- ]sharing"
+          ]
+        ],
+        [
+          "team vision = values, purpose, mission, strategy, goals",
+          [
+            "values",
+            "purpose",
+            "mission",
+            "strategy",
+            "goals"
+          ]
+        ],
+        [
+          "core values build trust and psychological safety",
+          [
+            "values",
+            "psychological safety|trust"
+          ]
+        ],
+        [
+          "teams with purpose: higher satisfaction, less conflict",
+          [
+            "purpose",
+            "satisfaction|conflict"
+          ]
+        ],
+        [
+          "OKRs = Objectives and Key Results, used for very ambitious goals",
+          [
+            "OKR",
+            "ambitious"
+          ]
+        ],
+        [
+          "service-oriented meetings: weekly, 30-60 min, designated lead, compulsory",
+          [
+            "service-oriented",
+            "weekly",
+            "30"
+          ]
+        ],
+        [
+          "meeting agenda: production changes, metrics, outages, paging events, action items",
+          [
+            "outages",
+            "action items"
+          ]
+        ],
+        [
+          "SRE team roles: tech lead, manager, project manager",
+          [
+            "tech lead",
+            "manager",
+            "project manager"
+          ]
+        ],
+        [
+          "collaborate with product development early in design, before code is committed",
+          [
+            "early|before",
+            "design"
+          ]
+        ],
+        [
+          "cross-functional teams share an OKR",
+          [
+            "cross-functional"
+          ]
+        ],
+        [
+          "cross-training: hire for it; reduces cost/turnover, improves morale/productivity",
+          [
+            "cross-train",
+            "turnover|morale|productivity"
+          ]
+        ],
+        [
+          "g2g employee-to-employee network runs 80% of trainings",
+          [
+            "g2g|employee-to-employee",
+            "80"
+          ]
+        ],
+        [
+          "job shadowing as a knowledge-sharing practice",
+          [
+            "shadowing"
+          ]
+        ],
+        [
+          "postmortems foster knowledge sharing; tools with real-time collaboration, open commenting, email notifications",
+          [
+            "postmortem",
+            "real-time|commenting|notification"
+          ]
+        ]
+      ],
+      "noise": [
+        "German",
+        "organize the world"
+      ],
+      "tech_expected": [],
+      "tech_forbidden": [
+        "OKR",
+        "g2g",
+        "SRE",
+        "postmortem",
+        "cross-training",
+        "job shadowing"
+      ]
+    },
+    "18-cicd": {
+      "split": "tune",
+      "file": "Developing a Google SRE Culture/18-Continuous integration, continuous delivery, and canarying.md",
+      "facts": [
+        [
+          "developers favor moonshots; SREs favor gradual change",
+          [
+            "moonshot",
+            "gradual|small"
+          ]
+        ],
+        [
+          "change is best small and frequent, rolled out in small waves",
+          [
+            "small",
+            "frequent"
+          ]
+        ],
+        [
+          "CI = building, integrating, testing code in dev environment, more often -> quality",
+          [
+            "continuous integration",
+            "test",
+            "build|integrat"
+          ]
+        ],
+        [
+          "CD = can deploy to production frequently but may choose not to",
+          [
+            "continuous delivery",
+            "deploy",
+            "frequent|choose|not to"
+          ]
+        ],
+        [
+          "SDLC stages: code, build, integrate, test, release, deploy, operate; CI/CD fills the middle",
+          [
+            "release",
+            "deploy",
+            "operate"
+          ]
+        ],
+        [
+          "CI/CD benefits: less human error, higher quality, easier recovery, shorter time to market",
+          [
+            "human error",
+            "recover|time to market|quality"
+          ]
+        ],
+        [
+          "canary in a coal mine metaphor: small expendable thing detects danger",
+          [
+            "coal mine|canary in"
+          ]
+        ],
+        [
+          "canarying = deploy change to a small group of users, evaluate impact, then decide",
+          [
+            "canar",
+            "subset|small|group",
+            "evaluat|decid|impact"
+          ]
+        ],
+        [
+          "requirement: canary population representative of the control population",
+          [
+            "representative",
+            "control"
+          ]
+        ],
+        [
+          "requirement: only difference between canary and control is the change under test",
+          [
+            "only (the )?(difference|change)|differ\\w*.{0,60}only|only.{0,40}differ"
+          ]
+        ],
+        [
+          "requirement: canary small enough not to endanger overall service quality",
+          [
+            "small enough|endanger"
+          ]
+        ],
+        [
+          "requirement: simple, low cognitive load, easy to cancel",
+          [
+            "cognitive|simple|easy to (cancel|reason)"
+          ]
+        ],
+        [
+          "the canary requirements partly conflict with each other",
+          [
+            "conflict"
+          ]
+        ],
+        [
+          "canary bugs cost far less than a full rollout and can be reversed quickly",
+          [
+            "cost",
+            "less|lower|smaller|cheaper",
+            "revers|quickly|rollback|roll back"
+          ]
+        ]
+      ],
+      "noise": [],
+      "tech_expected": [],
+      "tech_forbidden": [
+        "canary",
+        "canarying",
+        "CI/CD",
+        "CICD",
+        "SRE",
+        "DevOps",
+        "continuous"
+      ]
+    },
+    "19-design": {
+      "split": "tune",
+      "file": "Developing a Google SRE Culture/19-Design thinking and prototyping.md",
+      "facts": [
+        [
+          "lowering the cost of failure (CI/CD, canarying) enables innovation",
+          [
+            "cost of failure",
+            "innovat"
+          ]
+        ],
+        [
+          "design thinking = creativity + structure for complex problems",
+          [
+            "design thinking",
+            "creativ",
+            "structure"
+          ]
+        ],
+        [
+          "five phases: empathize, define, ideate, prototype, test",
+          [
+            "empathi[sz]e",
+            "define",
+            "ideate",
+            "prototype",
+            "test"
+          ]
+        ],
+        [
+          "empathize: observe users, set aside own assumptions",
+          [
+            "empath",
+            "assumption|observe"
+          ]
+        ],
+        [
+          "define the problem from the user's point of view",
+          [
+            "define",
+            "point of view|user"
+          ]
+        ],
+        [
+          "ideate: generate many ideas, think outside the box",
+          [
+            "ideate",
+            "idea"
+          ]
+        ],
+        [
+          "prototype: get ideas into the real world, experimental, before committing",
+          [
+            "prototype",
+            "experiment|before commit"
+          ]
+        ],
+        [
+          "test prototypes in a real-world setting with intended users",
+          [
+            "test",
+            "real[- ]world",
+            "user"
+          ]
+        ],
+        [
+          "software mindset: focus on user, 10x thinking, then prototype",
+          [
+            "10x"
+          ]
+        ],
+        [
+          "test gradually with CI/CD and canarying",
+          [
+            "canar",
+            "gradual"
+          ]
+        ],
+        [
+          "prototype-driven culture: more ideas tested, faster failures, more successes",
+          [
+            "fast\\w* fail|faster failure",
+            "success"
+          ]
+        ],
+        [
+          "no right way to prototype: lego/physical, paper, clickable, role play, video",
+          [
+            "lego|physical|paper",
+            "clickable",
+            "role[- ]?play",
+            "video"
+          ]
+        ],
+        [
+          "make prototypes real enough; more concrete -> more actionable feedback",
+          [
+            "actionable|concrete|real enough"
+          ]
+        ]
+      ],
+      "noise": [
+        "paper cups",
+        "Netherlands|Dutch",
+        "heat map"
+      ],
+      "tech_expected": [],
+      "tech_forbidden": [
+        "design thinking",
+        "prototyp",
+        "canar",
+        "CICD",
+        "CI/CD",
+        "SRE"
+      ]
+    },
+    "23-vpc": {
+      "split": "holdout",
+      "file": "Google Cloud Fundamentals_ Core Infrastructure/23-Connecting networks to Google VPC.md",
+      "facts": [
+        [
+          "Cloud VPN: tunnel over the internet to connect VPC to other networks",
+          [
+            "cloud vpn",
+            "tunnel|internet"
+          ]
+        ],
+        [
+          "Cloud Router + BGP exchange routes dynamically; new subnets propagate automatically",
+          [
+            "cloud router",
+            "BGP|border gateway",
+            "dynamic|automatic"
+          ]
+        ],
+        [
+          "Direct Peering: router in same public data center as a Google point of presence",
+          [
+            "direct peering",
+            "point of presence|PoP"
+          ]
+        ],
+        [
+          "Carrier Peering: via a service-provider partner when not in a point of presence",
+          [
+            "carrier peering",
+            "service provider|partner"
+          ]
+        ],
+        [
+          "peering is not covered by a Google SLA",
+          [
+            "peering",
+            "not covered|no SLA|isn.t covered|without (an )?SLA|not.{0,30}SLA"
+          ]
+        ],
+        [
+          "Dedicated Interconnect: private direct connection to Google; SLA up to 99.99% with qualifying topology",
+          [
+            "dedicated interconnect",
+            "99\\.99"
+          ]
+        ],
+        [
+          "Dedicated Interconnect can be backed up by a VPN",
+          [
+            "backed up|backup",
+            "vpn"
+          ]
+        ],
+        [
+          "Partner Interconnect: through a supported provider; for sites that can't reach a colocation facility or don't need 10 Gbps",
+          [
+            "partner interconnect",
+            "service provider|provider",
+            "colocation|10 g"
+          ]
+        ],
+        [
+          "Partner Interconnect: Google not responsible for the third-party provider part",
+          [
+            "not responsible|isn.t responsible|outside (of )?google|third[- ]party"
+          ]
+        ],
+        [
+          "Cross-Cloud Interconnect: dedicated connectivity between Google Cloud and another cloud provider (multicloud)",
+          [
+            "cross-cloud interconnect",
+            "another cloud|other cloud|multicloud|multi-cloud"
+          ]
+        ],
+        [
+          "Cross-Cloud Interconnect sizes: 10 and 100 Gbps",
+          [
+            "10 (gigabits|gbps|g)",
+            "100 (gigabits|gbps|g)"
+          ]
+        ],
+        [
+          "choice depends on three questions: private addressing, bandwidth/performance, willing to install equipment in a PoP",
+          [
+            "private address",
+            "bandwidth",
+            "equipment"
+          ]
+        ],
+        [
+          "private-to-private with OK internet connection -> Cloud VPN; no private need -> public IPs",
+          [
+            "public ip",
+            "cloud vpn"
+          ]
+        ],
+        [
+          "private high-performance without installing equipment -> Partner Interconnect",
+          [
+            "partner interconnect",
+            "can.t|isn.t an option|not an option|without install|no equipment|instead|cannot|unable|not (possible|feasible)"
+          ]
+        ]
+      ],
+      "noise": [],
+      "tech_expected": [
+        "Cloud VPN",
+        "Cloud Router",
+        "Dedicated Interconnect",
+        "Partner Interconnect",
+        "Cross-Cloud Interconnect"
+      ],
+      "tech_forbidden": []
+    },
+    "26-goal-setting": {
+      "split": "extra",
+      "file": "Developing a Google SRE Culture/26-Goal setting.md",
+      "facts": [],
+      "noise": [],
+      "tech_expected": [],
+      "tech_forbidden": []
+    }
+  }
+}

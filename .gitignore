@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+eval/out/
+
+# saved lesson page: contains account ids and the full course page, keep it local only
+archive/sample.html
+
+# experiment write-ups containing course-derived text
+eval/compare-23-vpc.md
+eval/claude-23-vpc.md
