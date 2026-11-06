@@ -29,6 +29,8 @@ Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds 
 
 On a **quiz** page the button reads "Copy Quiz": the userscript saves a readable Markdown copy (numbered questions, `- [ ]` options, your selected option checked) as `NN-<quiz title>.md` and tells the server it is a quiz (`X-Mathesis-Kind: quiz`), so no summary is made.
 
+Press **Shift twice** quickly on a page to hide or show the button (remembered per site).
+
 ## Installing the userscripts from the server
 
 With `mathesis serve` running, install each script with **Install from URL** (Tampermonkey: Utilities; Violentmonkey: "+" > Install from URL):

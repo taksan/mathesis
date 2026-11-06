@@ -233,6 +233,29 @@
       });
   });
 
+  // Double Shift shows/hides the button (remembered per site). Any other key between the two presses cancels it.
+  const HIDE_KEY = 'mathesis-button-hidden';
+  const store = {
+    get() { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch (e) { return false; } },
+    set(hidden) { try { localStorage.setItem(HIDE_KEY, hidden ? '1' : '0'); } catch (e) { /* storage blocked: not remembered */ } },
+  };
+  const applyHidden = (hidden) => { button.style.display = hidden ? 'none' : ''; };
+  applyHidden(store.get());
+  let lastShift = 0;
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Shift') { lastShift = 0; return; }
+    if (e.repeat) return;
+    const now = Date.now();
+    if (lastShift && now - lastShift < 400) {
+      const hidden = button.style.display !== 'none';
+      applyHidden(hidden);
+      store.set(hidden);
+      lastShift = 0;
+    } else {
+      lastShift = now;
+    }
+  }, true);
+
   (document.body || document.documentElement).appendChild(button);
   console.log('[Mathesis] button added');
 
