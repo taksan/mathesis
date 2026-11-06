@@ -15,8 +15,8 @@
 (function () {
   'use strict';
 
-//  const BASE_DIR = '/home/takeuchi/Private/Documents/TakVault/_study_roadmap/Google ML Certification';
-  const BASE_DIR = '/home/takeuchi/projects/obsidian-takvault/_study_roadmap/Google Skills';
+  // Folder under the server's MATHESIS_ROOT (the server decides where that is on disk).
+  const BASE_DIR = 'Google Skills';
 
   const normalizeName = (s) => (s || '').replace(/[:/]/g, '_').replace(/\s+/g, ' ').trim();
 

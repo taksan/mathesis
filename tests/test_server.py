@@ -15,17 +15,20 @@ def client(tmp_path):
 
 def test_write_creates_missing_directories_and_status_reflects_it(client):
     target = client.root / "Path" / "Course" / "01-Lesson.md"
-    h = {"X-File-Path": str(target)}
+    h = {"X-File-Path": "Path/Course/01-Lesson.md"}
     assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False}
     r = client.post("/write", content="# Lesson\nhello".encode(), headers=h)
-    assert r.status_code == 200 and r.json()["bytes"] == 14
+    assert r.status_code == 200 and r.json()["bytes"] == 14 and r.json()["path"] == "Path/Course/01-Lesson.md"
     assert target.read_text() == "# Lesson\nhello"
     assert client.get("/status", headers=h).json()["exists"] is True
 
 
 def test_path_outside_root_is_rejected(client):
-    assert client.post("/write", content=b"x", headers={"X-File-Path": "/etc/evil.md"}).status_code == 403
-    assert client.get("/status", headers={"X-File-Path": str(client.root / ".." / "x.md")}).status_code == 403
+    assert client.post("/write", content=b"x", headers={"X-File-Path": "../evil.md"}).status_code == 403
+    assert client.get("/status", headers={"X-File-Path": "a/../../x.md"}).status_code == 403
+    r = client.post("/write", content=b"x", headers={"X-File-Path": "/etc/evil.md"})  # absolute paths are refused
+    assert r.status_code == 400 and "relative" in r.json()["error"]
+    assert str(client.root) not in client.get("/status", headers={"X-File-Path": "../x.md"}).text
 
 
 def test_missing_header_is_a_400(client):
@@ -50,8 +53,8 @@ def test_summary_runs_in_background_when_enabled(tmp_path, monkeypatch):
     monkeypatch.setattr("mathesis.ollama.OllamaClient.check_model", lambda self: (True, "ok"))
     with TestClient(app) as c:
         target = tmp_path.resolve() / "P" / "C" / "01-L.md"
-        c.post("/write", content=b"transcript", headers={"X-File-Path": str(target)})
-        c.post("/write", content=b"   ", headers={"X-File-Path": str(target)})   # blank content: no summary
+        c.post("/write", content=b"transcript", headers={"X-File-Path": "P/C/01-L.md"})
+        c.post("/write", content=b"   ", headers={"X-File-Path": "P/C/01-L.md"})   # blank content: no summary
     assert calls == [("transcript", str(target))]
 
 
@@ -63,11 +66,11 @@ def test_quiz_is_saved_but_never_summarized(tmp_path, monkeypatch):
     with TestClient(app) as c:
         quiz = tmp_path.resolve() / "P" / "C" / "36-Final Assessment.md"
         r = c.post("/write", content="# Final Assessment\n".encode(),
-                   headers={"X-File-Path": str(quiz), "X-Mathesis-Kind": "quiz"})
+                   headers={"X-File-Path": "P/C/36-Final Assessment.md", "X-Mathesis-Kind": "quiz"})
         assert r.json()["kind"] == "quiz" and quiz.read_text() == "# Final Assessment\n"
         lesson = tmp_path.resolve() / "P" / "C" / "01-L.md"
-        c.post("/write", content=b"text", headers={"X-File-Path": str(lesson), "X-Mathesis-Kind": "transcript"})
-        c.post("/write", content=b"text", headers={"X-File-Path": str(lesson.with_name("02-M.md"))})   # no header = transcript
+        c.post("/write", content=b"text", headers={"X-File-Path": "P/C/01-L.md", "X-Mathesis-Kind": "transcript"})
+        c.post("/write", content=b"text", headers={"X-File-Path": "P/C/02-M.md"})   # no header = transcript
     assert calls == [str(lesson), str(lesson.with_name("02-M.md"))]
 
 

@@ -12,8 +12,8 @@
 (function () {
   'use strict';
 
-  // Files land in <BASE_DIR>/<course>/<NN-lesson>.md (the server only accepts paths under MATHESIS_ROOT).
-  const BASE_DIR = '/home/takeuchi/projects/obsidian-takvault/_study_roadmap/Udemy';
+  // Files land in <BASE_DIR>/<course>/<NN-lesson>.md under the server's MATHESIS_ROOT (where that is on disk is the server's business).
+  const BASE_DIR = 'Udemy';
   const SERVER = 'http://127.0.0.1:5000';
 
   const normalizeName = (s) => (s || '').replace(/[:/\\?*"<>|]/g, '_').replace(/\s+/g, ' ').trim();

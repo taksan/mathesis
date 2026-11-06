@@ -63,7 +63,7 @@ Environment variables (command-line flags override them):
 | `MATHESIS_OBSIDIAN_OPEN` | on | clicking the "Summary ready" notification opens the summary in Obsidian |
 | `MATHESIS_OBSIDIAN` | auto-detected | command that hands an `obsidian://` URI to Obsidian, e.g. the path of the Obsidian AppImage |
 
-If you change the notes folder, change `BASE_DIR` in the userscript too: the server only accepts paths inside `MATHESIS_ROOT`.
+The userscripts only send paths relative to `MATHESIS_ROOT` (`Google Skills/...`, `Udemy/...`), so no local folder is exposed in them. To move your notes, change `MATHESIS_ROOT` on the server; the server refuses absolute paths and anything that escapes the root.
 
 ## How the notes are made
 

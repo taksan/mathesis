@@ -1,6 +1,6 @@
 """HTTP API used by the userscript.
 
-POST /write   Header X-File-Path: absolute path of the .md file; body: the content (UTF-8)
+POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); any other kind ("quiz", "quiz-review") is saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
@@ -52,12 +52,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"error": exc.message}, status_code=exc.status)
 
     def target_path(raw_path: str | None) -> Path:
-        """Validated target from the X-File-Path header: it must lie inside the configured root."""
+        """X-File-Path is relative to the configured root ("Google Skills/Path/Course/01-Lesson.md")."""
         if not raw_path:
             raise ApiError(400, "missing X-File-Path header")
-        target = Path(raw_path).resolve()
+        if Path(raw_path).is_absolute() or raw_path.startswith(("/", "\\")):
+            raise ApiError(400, "X-File-Path must be relative to the Mathesis root (update the userscript)")
+        target = (settings.root / raw_path).resolve()
         if settings.root not in target.parents:
-            raise ApiError(403, f"path outside {settings.root}")
+            raise ApiError(403, "path escapes the Mathesis root")
         return target
 
     @app.get("/userscript", response_class=HTMLResponse)
@@ -102,7 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             notify("Transcript saved", target.stem, enabled=settings.notify)
         if settings.summarize and content.strip() and kind == "transcript":
             background.add_task(write_summary, content.decode("utf-8", "replace"), str(target), settings)
-        return {"status": "ok", "path": str(target), "bytes": len(content), "kind": kind}
+        return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind}
 
     return app
 
