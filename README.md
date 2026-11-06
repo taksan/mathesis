@@ -36,7 +36,7 @@ With `mathesis serve` running, install each script with **Install from URL** (Ta
 - `http://127.0.0.1:5000/userscript/mathesis.user.js` (Google Skills)
 - `http://127.0.0.1:5000/userscript/mathesis-udemy.user.js` (Udemy)
 
-`http://127.0.0.1:5000/userscript` is a page listing the scripts with an **Install** button for each (`/userscript.json` is the plain list). They carry `@updateURL`/`@downloadURL` pointing at the same address, and the server reads the file on every request. `MATHESIS_USERSCRIPT_DIR` changes the folder (default: `userscript/` of the checkout). `@version` is the git sha of the commit that last changed the script.
+`http://127.0.0.1:5000/userscript` is a page listing the scripts with an **Install** button for each (`/userscript.json` is the plain list). They carry `@updateURL`/`@downloadURL` pointing at the same address, and the server reads the file on every request. `MATHESIS_USERSCRIPT_DIR` changes the folder (default: `userscript/` of the checkout). `@version` is `<commit count>.<sha>` of the commit that last changed the script (the count always grows, so update checks see a newer version; `scripts/stamp-userscripts.sh` sets it after you commit).
 
 ## Udemy
 
