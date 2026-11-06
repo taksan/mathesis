@@ -33,6 +33,8 @@ Some Google Skills lessons are **documents** whose text is not in the page at al
 
 If a page has no recognisable content (no transcript, quiz or lab text), the button saves the **whole page HTML** instead: `X-Mathesis-Kind: raw`, file `<course>/<NN-lesson>.raw.html` next to the lessons (or `_raw/<url words>.raw.html` when the page title can't be read). Raw pages are never summarized; they are kept so the page can be analysed and the script taught about it.
 
+When a lesson is already saved, a second purple button **Open in Obsidian** appears under the main one. It asks the server for the link at click time (the summary if it exists, else the lesson file), so the userscript never holds a local path; this needs the `obsidian://` handler registered on your system.
+
 Press **Shift twice** quickly on a page to hide or show the button (remembered per site).
 
 ## Installing the userscripts from the server

@@ -172,6 +172,12 @@
     #copy-transcript-btn:hover { filter: brightness(0.85); }
     #copy-transcript-btn.saved { background-color: #1e8e3e; }
     #copy-transcript-btn.unknown { background-color: #5f6368; }
+    #open-obsidian-btn {
+      position: fixed; top: 116px; right: 10px; z-index: 1000;
+      padding: 10px 15px; background-color: #7c3aed; color: white;
+      border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
+    }
+    #open-obsidian-btn:hover { filter: brightness(0.85); }
   `;
   document.head.appendChild(style);
 
@@ -181,7 +187,32 @@
   button.textContent = LABEL();
 
   // Show whether this lesson was already saved (green) or not (red); grey = server unreachable.
+
+  // Second button, only while this lesson is saved: opens the summary (or the lesson) in Obsidian.
+  // The server builds the obsidian:// link, so no local path lives in this script.
+  const openButton = document.createElement('button');
+  openButton.id = 'open-obsidian-btn';
+  openButton.textContent = 'Open in Obsidian';
+  openButton.style.display = 'none';
+  let lessonSaved = false;
+  const syncOpenButton = () => {
+    openButton.style.display = lessonSaved && button.style.display !== 'none' ? '' : 'none';
+  };
+  openButton.addEventListener('click', () => {
+    let filePath;
+    try { filePath = computePathToWrite(); } catch (e) { return; }
+    fetch('http://127.0.0.1:5000/status', { headers: { 'X-File-Path': filePath } })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.obsidian_uri) window.location.href = d.obsidian_uri;
+        else alert('This lesson is not saved yet');
+      })
+      .catch((error) => alert('Could not reach the Mathesis server: ' + error));
+  });
+
   function setButtonState(state, summaryDone) {
+    lessonSaved = state === 'saved';
+    syncOpenButton();
     button.classList.toggle('saved', state === 'saved');
     button.classList.toggle('unknown', state === 'unknown');
     button.textContent =
@@ -260,7 +291,7 @@
     get() { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch (e) { return false; } },
     set(hidden) { try { localStorage.setItem(HIDE_KEY, hidden ? '1' : '0'); } catch (e) { /* storage blocked: not remembered */ } },
   };
-  const applyHidden = (hidden) => { button.style.display = hidden ? 'none' : ''; };
+  const applyHidden = (hidden) => { button.style.display = hidden ? 'none' : ''; syncOpenButton(); };
   applyHidden(store.get());
   let lastShift = 0;
   window.addEventListener('keydown', (e) => {
@@ -278,6 +309,7 @@
   }, true);
 
   (document.body || document.documentElement).appendChild(button);
+  (document.body || document.documentElement).appendChild(openButton);
   console.log('[Mathesis] button added');
 
   // Check now, and again whenever the lesson changes (the site may navigate without a reload).

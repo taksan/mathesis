@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 
 from mathesis import server
 from mathesis.config import Settings
+from mathesis.obsidian import uri_for
+from mathesis.pipeline import summary_path
 
 
 @pytest.fixture
@@ -16,11 +18,15 @@ def client(tmp_path):
 def test_write_creates_missing_directories_and_status_reflects_it(client):
     target = client.root / "Path" / "Course" / "01-Lesson.md"
     h = {"X-File-Path": "Path/Course/01-Lesson.md"}
-    assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False}
+    assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False, "obsidian_uri": None}
     r = client.post("/write", content="# Lesson\nhello".encode(), headers=h)
     assert r.status_code == 200 and r.json()["bytes"] == 14 and r.json()["path"] == "Path/Course/01-Lesson.md"
     assert target.read_text() == "# Lesson\nhello"
-    assert client.get("/status", headers=h).json()["exists"] is True
+    status = client.get("/status", headers=h).json()
+    assert status["exists"] is True
+    assert status["obsidian_uri"] == uri_for(target)                       # the lesson itself ...
+    summary_path(target).write_text("notes")
+    assert client.get("/status", headers=h).json()["obsidian_uri"] == uri_for(summary_path(target))  # ... or its summary
 
 
 def test_path_outside_root_is_rejected(client):

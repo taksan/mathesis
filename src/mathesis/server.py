@@ -3,7 +3,8 @@
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
-GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
+GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "obsidian_uri": str | null}
+              (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist)
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
 """
 import re
@@ -19,6 +20,7 @@ from . import bundle
 from .config import Settings
 from .notify import notify
 from .ollama import OllamaClient
+from .obsidian import uri_for
 from .pipeline import summary_path, write_summary
 from .userscripts import list_scripts, render_page
 
@@ -86,7 +88,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def status(x_file_path: str | None = Header(None)):
         """Was this lesson already saved?"""
         target = target_path(x_file_path)
-        return {"exists": target.is_file(), "summary_exists": summary_path(target).is_file()}
+        exists, summary = target.is_file(), summary_path(target)
+        return {"exists": exists, "summary_exists": summary.is_file(),
+                "obsidian_uri": uri_for(summary if summary.is_file() else target) if exists else None}
 
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
