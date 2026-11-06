@@ -3,7 +3,7 @@
 POST /write   Header X-File-Path: absolute path of the .md file; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); any other kind ("quiz", "quiz-review") is saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
-GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript lists them
+GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
 """
 import re
 from contextlib import asynccontextmanager
@@ -11,13 +11,14 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from .config import Settings
 from .notify import notify
 from .ollama import OllamaClient
 from .pipeline import summary_path, write_summary
+from .userscripts import list_scripts, render_page
 
 
 class ApiError(Exception):
@@ -59,10 +60,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise ApiError(403, f"path outside {settings.root}")
         return target
 
-    @app.get("/userscript")
-    def userscripts():
-        d = settings.userscript_dir
-        return {"scripts": sorted(f.name for f in d.glob("*.user.js")) if d.is_dir() else []}
+    @app.get("/userscript", response_class=HTMLResponse)
+    def userscripts(request: Request):
+        """Install page: every script of the checkout with an Install link."""
+        return render_page(list_scripts(settings.userscript_dir), str(request.base_url).rstrip("/"))
+
+    @app.get("/userscript.json")
+    def userscripts_json():
+        return {"scripts": [s.file for s in list_scripts(settings.userscript_dir)]}
 
     @app.get("/userscript/{name}")
     def userscript(name: str):

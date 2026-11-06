@@ -82,14 +82,18 @@ def test_preflight_allows_the_kind_header(client):
 def test_userscripts_are_served_and_path_traversal_is_refused(tmp_path):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
-    (scripts / "a.user.js").write_text("// ==UserScript==\n// @version abc\n// ==/UserScript==\n")
+    (scripts / "a.user.js").write_text("// ==UserScript==\n// @name A <b>\n// @version abc\n// @match https://x.test/*\n// ==/UserScript==\n")
     (tmp_path / "secret.user.js").write_text("nope")
     settings = Settings(root=tmp_path.resolve(), userscript_dir=scripts, summarize=False, notify=False)
     with TestClient(server.create_app(settings)) as c:
         r = c.get("/userscript/a.user.js")
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
         assert "@version abc" in r.text
-        assert c.get("/userscript").json() == {"scripts": ["a.user.js"]}
+        assert "A &lt;b&gt;" in c.get("/userscript").text  # header text is escaped
+        assert c.get("/userscript.json").json() == {"scripts": ["a.user.js"]}
+        page = c.get("/userscript")
+        assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+        assert "http://testserver/userscript/a.user.js" in page.text and "<code>abc</code>" in page.text
         assert c.get("/userscript/missing.user.js").status_code == 404
         assert c.get("/userscript/..%2Fsecret.user.js").status_code == 404
         assert c.get("/userscript/a.txt").status_code == 404
