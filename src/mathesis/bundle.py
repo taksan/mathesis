@@ -88,6 +88,7 @@ def one_line(html) -> str:
 LABELS = ("title", "itemTitle", "tabText", "frontText")  # shown titles of items (a component's own "title" is an editor label)
 TEXTS = ("body", "text", "backText")
 CHILDREN = ("_items", "_transcript", "_video", "_audio", "tooltipMediaVideo", "tooltipMediaAudio")
+UI_INSTRUCTION_MAX = 55
 UI_INSTRUCTION = re.compile(r"\s*(?:<[^>]+>)*\s*(select|use the|click|press|move|watch|drag|tap)\b", re.I)
 
 
@@ -103,6 +104,14 @@ def _table(rows) -> str:
     return "\n".join(lines)
 
 
+def _without_title(text: str, labels: list[str]) -> str:
+    """Flip cards repeat their title as the first paragraph of the back side: it is already the item's label."""
+    paragraphs = text.split("\n\n")
+    while len(paragraphs) > 1 and re.sub(r"\s+", " ", paragraphs[0].replace("*", "")).strip().lower() in labels:
+        paragraphs.pop(0)
+    return "\n\n".join(paragraphs)
+
+
 def render_node(node, out: list[str], depth: int = 0, in_transcript: bool = False) -> None:
     """Appends the readable text of a component (or of one of its items) to out, in reading order."""
     if isinstance(node, list):
@@ -116,21 +125,22 @@ def render_node(node, out: list[str], depth: int = 0, in_transcript: bool = Fals
     heading = to_md(node.get("displayTitle")) if depth == 0 else ""
     if heading:
         out.append("#### " + one_line(heading))
+    labels: list[str] = []
     for key in LABELS:
         if key == "title" and depth == 0:
             continue
         label = one_line(node.get(key))
         if label:
+            labels.append(label.lower())
             out.append(f"**{label}**")
     for key in TEXTS:
-        text = to_md(node.get(key))
+        text = _without_title(to_md(node.get(key)), labels)
         if text:
             out.append(("Transcript: " + text) if in_transcript and key == "body" else text)
-    instruction = node.get("instruction")
-    if isinstance(instruction, str) and instruction.strip() and not UI_INSTRUCTION.match(instruction):
-        text = to_md(instruction)
-        if text:
-            out.append(f"*{text}*")
+    instruction = to_md(node.get("instruction"))
+    # "Select each card to learn more." is chrome; a longer one usually names the topic ("...to explore the five key values")
+    if instruction and not (UI_INSTRUCTION.match(instruction) and len(instruction) <= UI_INSTRUCTION_MAX):
+        out.append(f"*{instruction}*")
     if isinstance(node.get("_codeString"), str) and node["_codeString"].strip():
         out.append(f"```{node.get('_codeLanguage') or ''}\n{node['_codeString'].strip()}\n```")
     if isinstance(node.get("_rows"), list):

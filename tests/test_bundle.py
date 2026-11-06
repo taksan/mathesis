@@ -84,6 +84,32 @@ def test_page_is_rendered_in_reading_order_as_markdown():
         assert absent not in md
 
 
+def test_flip_card_back_does_not_repeat_the_title():
+    data = course()
+    data["components"] = [{"_id": "f1", "_parentId": "blk1", "_sortOrder": 1, "_component": "flipCard",
+                           "instruction": "Flip each card to review the principles.",
+                           "_items": [{"frontText": "<p><strong>Manage incidents</strong></p>",
+                                       "backText": "<p>Manage incidents</p><p>Follow clear procedures.</p>"},
+                                      {"frontText": "<p>Automate change</p>",
+                                       "backText": "<p><strong>Automate change</strong></p><p>Use CI/CD pipelines.</p>"}]}]
+    md = bundle.markdown_for(SRC, fetch_from(data))
+    assert "*Flip each card to review the principles.*" in md
+    assert md.count("Manage incidents") == 1 and md.count("Automate change") == 1
+    assert "**Manage incidents**\n\nFollow clear procedures." in md
+    assert "**Automate change**\n\nUse CI/CD pipelines." in md
+
+
+def test_long_instructions_naming_the_topic_are_kept_and_short_ui_ones_dropped():
+    data = course()
+    data["components"] = [
+        {"_id": "i1", "_parentId": "blk1", "_sortOrder": 1, "_component": "accordion", "body": "<p>Body text of the accordion.</p>",
+         "instruction": "Select each item below to explore the five key business values you will build."},
+        {"_id": "i2", "_parentId": "blk1", "_sortOrder": 2, "_component": "tabs", "body": "<p>Body text of the tabs.</p>",
+         "instruction": "Select each card to learn more."}]
+    md = bundle.markdown_for(SRC, fetch_from(data))
+    assert "explore the five key business values" in md and "learn more" not in md
+
+
 def test_a_menu_id_renders_every_page_below_it_and_unknown_ids_fail():
     src = SRC.replace("a" * 24, "d" * 24)
     md = bundle.markdown_for(src, fetch_from(course()))
