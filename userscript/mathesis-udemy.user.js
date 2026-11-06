@@ -315,7 +315,12 @@
     fetch(`${SERVER}/status`, { headers: { 'X-File-Path': filePath } })
       .then((r) => r.json())
       .then((d) => { if (lastChecked === filePath) setButtonState(d.exists ? 'saved' : 'new', d.summary_exists); })
-      .catch(() => setButtonState('unknown'));
+      .catch(() => {
+        // The server may just be busy or restarting (or the request was cut by a navigation): show it, then check again
+        if (lastChecked !== filePath) return;
+        setButtonState('unknown');
+        setTimeout(() => { if (lastChecked === filePath) lastChecked = null; }, 3000); // the 1 s timer below retries
+      });
   }
 
   button.addEventListener('click', async () => {
