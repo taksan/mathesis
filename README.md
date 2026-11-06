@@ -29,6 +29,11 @@ Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds 
 
 On a **quiz** page the button reads "Copy Quiz": the userscript saves a readable Markdown copy (numbered questions, `- [ ]` options, your selected option checked) as `NN-<quiz title>.md` and tells the server it is a quiz (`X-Mathesis-Kind: quiz`), so no summary is made.
 
+## Udemy
+
+`userscript/mathesis-udemy.user.js` saves Udemy lectures to `Udemy/<course>/<NN>-<lecture>.md` through the same server (summaries included).
+On a **quiz results** page the button reads "Copy Incorrect Questions": it selects the "incorrect" pill (and restores your pill afterwards), and saves only the wrong questions as `NN-<quiz title> - incorrect.md` with `X-Mathesis-Kind: quiz-review` (no summary). Each question has its domain, the options (your answer ❌, correct answer ✅) and Udemy's explanations; the explanations of the options you did not pick are in a folded callout.
+
 `summarize` skips files that already have a summary (`--force` to overwrite). Useful flags: `--model`, `--single` (one call with the original prompt), `--no-revise`; `serve` also takes `--no-reload`, `--no-summary`, `--no-notify`, `--host`, `--port`, `--root`.
 
 ## Configuration

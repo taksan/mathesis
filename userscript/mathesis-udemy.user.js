@@ -2,7 +2,7 @@
 // @name         Mathesis: save Udemy transcript
 // @namespace    http://tampermonkey.net/
 // @version      1.0
-// @description  Adds a button that saves the transcript of a Udemy lesson to the local Mathesis server (mathesis serve)
+// @description  Adds a button that saves a Udemy lesson transcript, or the incorrect questions of a quiz result, to the local Mathesis server (mathesis serve)
 // @match        https://www.udemy.com/course/*
 // @grant        none
 // ==/UserScript==
@@ -30,20 +30,24 @@
     return normalizeName(decodeURIComponent(slug).replace(/-/g, ' '));
   }
 
-  // Udemy titles the lessons "12. Title" in the curriculum; keep that number, zero-padded to the course size.
+  // Udemy titles lectures "12. Title" in the curriculum: keep that number, zero-padded to the course size.
+  // Items without a number (quizzes, practice tests) get their position in the sidebar instead.
   function lessonFileName() {
     const item = currentItem();
     if (!item) throw new Error('Current lesson not found in the curriculum sidebar');
-    const title = item.innerText.trim();
+    const title = item.textContent.trim();
+    const all = [...document.querySelectorAll("[data-purpose='item-title']")];
     const m = title.match(/^(\d+)\.\s*(.*)$/s);
-    const total = document.querySelectorAll("[data-purpose='item-title']").length;
-    const width = Math.max(String(total).length, m ? m[1].length : 0, 2);
-    const prefix = m ? m[1].padStart(width, '0') + '-' : '';
-    return { title: m ? m[2].trim() : title, file: `${prefix}${normalizeName(m ? m[2] : title)}.md` };
+    const number = m ? m[1] : String(all.indexOf(item) + 1);
+    const name = m ? m[2].trim() : title;
+    const width = Math.max(String(all.length).length, number.length, 2);
+    const prefix = number === '0' ? '' : number.padStart(width, '0') + '-';
+    return { title: name, base: `${prefix}${normalizeName(name)}` };
   }
 
   function computePathToWrite() {
-    return `${BASE_DIR}/${courseName()}/${lessonFileName().file}`;
+    const { base } = lessonFileName();
+    return `${BASE_DIR}/${courseName()}/${base}${isQuizReview() ? ' - incorrect' : ''}.md`;
   }
 
   // ---- transcript ----
@@ -89,6 +93,7 @@
   }
 
   async function getTranscript() {
+    if (isQuizReview()) return getReview();
     const lines = await readTranscriptLines();
     const body = formatTranscript(lines);
     if (!body) {
@@ -96,6 +101,141 @@
       return null;
     }
     return `# ${lessonFileName().title}\n\n${body}\n`;
+  }
+
+  // ---- quiz results: the incorrect questions only ----
+
+  const STATUS = '[data-purpose="question-result-header-status-label"]';
+  const statusLabels = () => [...document.querySelectorAll(STATUS)];
+  const isQuizReview = () => statusLabels().length > 0;
+
+  // Rich text (question, options, explanations) -> Markdown.
+  function mdNode(n) {
+    if (n.nodeType === 3) return n.textContent.replace(/\s+/g, ' ');
+    if (n.nodeType !== 1) return '';
+    const kids = () => [...n.childNodes].map(mdNode).join('');
+    const wrap = (mark, t) => {
+      const lead = t.match(/^\s*/)[0], trail = t.match(/\s*$/)[0], core = t.trim();
+      return core ? lead + mark + core + mark + trail : t;
+    };
+    switch (n.tagName.toLowerCase()) {
+      case 'strong': case 'b': return wrap('**', kids());
+      case 'em': case 'i': return wrap('*', kids());
+      case 'code': return '`' + n.textContent + '`';
+      case 'a': {
+        const text = kids().trim(), href = n.getAttribute('href') || '';
+        return /^https?:/.test(href) && text ? `[${text}](${href})` : text;
+      }
+      case 'br': return '\n';
+      case 'img': return /^https?:/.test(n.src) ? `![${n.alt || ''}](${n.src})` : '';
+      case 'pre': return '\n\n```\n' + n.textContent.trim() + '\n```\n\n';
+      case 'p': case 'div': return '\n\n' + kids().trim() + '\n\n';
+      case 'ul': case 'ol': {
+        const items = [...n.children].filter((c) => c.tagName === 'LI').map((li, i) => {
+          const body = mdNode(li).trim().replace(/\n{2,}/g, '\n').replace(/\n/g, '\n  ');
+          return `${n.tagName === 'OL' ? i + 1 + '.' : '-'} ${body}`;
+        });
+        return '\n\n' + items.join('\n') + '\n\n';
+      }
+      default: return kids();
+    }
+  }
+  const toMarkdown = (el) => (el ? mdNode(el).replace(/\*\*(\s*`[^`\n]+`\s*)\*\*/g, '$1') // bold split around inline code
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : '');
+  const oneLine = (el) => toMarkdown(el).replace(/\s*\n+\s*/g, ' ');
+  const quote = (text) => text.split('\n').map((l) => (l ? '> ' + l : '>')).join('\n');
+
+  // The filter pills: "60 all", "34 correct", "26 incorrect", "0 skipped", "28 marked".
+  function pills() {
+    return [...document.querySelectorAll('input[type="radio"]')].map((input) => {
+      const label = input.id && document.querySelector(`label[for="${input.id}"]`);
+      const m = label && label.textContent.trim().match(/^(\d[\d,]*)\s+(all|correct|incorrect|skipped|marked)$/i);
+      return m ? { input, label, count: parseInt(m[1].replace(/,/g, ''), 10), name: m[2].toLowerCase() } : null;
+    }).filter(Boolean);
+  }
+
+  // The page only renders the questions of the selected pill, so select "incorrect", wait, and restore it afterwards.
+  async function withIncorrectPill(fn) {
+    const all = pills();
+    const incorrect = all.find((p) => p.name === 'incorrect');
+    if (!incorrect) return fn(null);
+    if (!incorrect.count) { alert('No incorrect questions in this attempt'); return null; }
+    const previous = all.find((p) => p.input.checked);
+    const switching = previous !== incorrect;
+    if (switching) incorrect.label.click();
+    for (let i = 0; i < 30; i++) { // up to ~4.5s for React to re-render
+      const labels = statusLabels();
+      if (labels.length === incorrect.count && labels.every((l) => /incorrect/i.test(l.textContent))) break;
+      await sleep(150);
+    }
+    try {
+      return fn(incorrect.count);
+    } finally {
+      if (switching && previous) previous.label.click();
+    }
+  }
+
+  // Smallest ancestor of a status label that contains only that question.
+  function paneOf(label) {
+    let el = label;
+    while (el.parentElement && el.parentElement.querySelectorAll(STATUS).length === 1) el = el.parentElement;
+    return el;
+  }
+
+  function parseQuestion(pane) {
+    const answers = [...pane.querySelectorAll('[data-purpose="answer"]')].map((a) => {
+      const tag = a.querySelector('[data-purpose="answer-result-header-user-label"]');
+      return {
+        text: oneLine(a.querySelector('[id="answer-text"]')),
+        selected: !!tag && /^your\b/i.test(tag.textContent.trim()),
+        correct: /answer-correct/.test(a.className),
+        explanation: toMarkdown(a.parentElement.querySelector('[id="question-explanation"]')),
+      };
+    });
+    const domain = pane.querySelector('[data-purpose="domain-pane"]');
+    return {
+      number: (pane.textContent.match(/Question\s*(\d+)/) || [])[1],
+      domain: domain && domain.lastElementChild ? domain.lastElementChild.textContent.trim() : '',
+      stem: toMarkdown(pane.querySelector('[id="question-prompt"]')),
+      answers,
+    };
+  }
+
+  function formatQuestion(q) {
+    const lines = [`## Question ${q.number}`, ''];
+    if (q.domain) lines.push(`*Domain: ${q.domain}*`, '');
+    lines.push(q.stem, '');
+    for (const a of q.answers) {
+      const note = a.selected && a.correct ? ' *(your answer, correct)*' : a.selected ? ' *(your answer)*' : a.correct ? ' *(correct answer)*' : '';
+      lines.push(`- [${a.selected ? 'x' : ' '}] ${a.correct ? '✅' : a.selected ? '❌' : ''} ${a.text}${note}`.replace(/\] {2}/, '] '));
+    }
+    lines.push('');
+    const shown = q.answers.filter((a) => (a.correct || a.selected) && a.explanation);
+    const others = q.answers.filter((a) => !(a.correct || a.selected) && a.explanation);
+    if (shown.length) lines.push('### Explanation', '', shown.map((a) => a.explanation).join('\n\n'), '');
+    if (others.length) lines.push('> [!note]- Why the other options are wrong', quote(others.map((a) => a.explanation).join('\n\n')), '');
+    return lines.join('\n');
+  }
+
+  function attemptLabel() {
+    for (const el of document.querySelectorAll('div, span, h1, h2, h3')) {
+      if (!el.children.length && /^Attempt \d+$/.test(el.textContent.trim())) return el.textContent.trim();
+    }
+    return '';
+  }
+
+  async function getReview() {
+    return withIncorrectPill((expected) => {
+      const wrong = statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim()));
+      if (!wrong.length) { alert('No incorrect questions found'); return null; }
+      if (expected != null && wrong.length !== expected) {
+        alert(`Expected ${expected} incorrect questions but found ${wrong.length}; saving what is on the page.`);
+      }
+      const total = (pills().find((p) => p.name === 'all') || {}).count;
+      const facts = [attemptLabel(), `${wrong.length} incorrect${total ? ` of ${total}` : ''} questions`].filter(Boolean);
+      const questions = wrong.map((l) => formatQuestion(parseQuestion(paneOf(l))));
+      return [`# ${lessonFileName().title} - incorrect questions`, '', `*${facts.join(' · ')}*`, '', questions.join('\n\n')].join('\n') + '\n';
+    });
   }
 
   // ---- button ----
@@ -115,15 +255,16 @@
 
   const button = document.createElement('button');
   button.id = 'copy-transcript-btn';
-  button.textContent = 'Copy Transcript';
+  const LABEL = () => (isQuizReview() ? 'Copy Incorrect Questions' : 'Copy Transcript');
+  button.textContent = LABEL();
 
   function setButtonState(state, summaryDone) {
     button.classList.toggle('saved', state === 'saved');
     button.classList.toggle('unknown', state === 'unknown');
     button.textContent =
       state === 'saved' ? `✓ Saved${summaryDone ? ' + summary' : ''} (copy again)` :
-      state === 'unknown' ? 'Copy Transcript (server offline)' :
-      'Copy Transcript';
+      state === 'unknown' ? `${LABEL()} (server offline)` :
+      LABEL();
   }
 
   let lastChecked = null;
@@ -146,6 +287,7 @@
       alert('Could not compute file path: ' + e.message);
       return;
     }
+    const kind = isQuizReview() ? 'quiz-review' : 'transcript';
     const transcription = await getTranscript();
     if (!transcription) return;
 
@@ -153,7 +295,7 @@
 
     fetch(`${SERVER}/write`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'X-File-Path': filePath, 'X-Mathesis-Kind': 'transcript' },
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': filePath, 'X-Mathesis-Kind': kind },
       body: transcription,
     })
       .then((response) => {
@@ -163,7 +305,7 @@
       .then((data) => {
         console.log('[Mathesis] saved', data);
         setButtonState('saved', false);
-        alert('Transcript sent successfully!');
+        alert(kind === 'quiz-review' ? 'Incorrect questions saved!' : 'Transcript sent successfully!');
       })
       .catch((error) => {
         console.error('Error:', error);

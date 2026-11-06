@@ -1,7 +1,7 @@
 """HTTP API used by the userscript.
 
 POST /write   Header X-File-Path: absolute path of the .md file; body: the content (UTF-8)
-              Header X-Mathesis-Kind: "transcript" (default, gets a summary) or "quiz" (saved as is)
+              Header X-Mathesis-Kind: "transcript" (default, gets a summary); any other kind ("quiz", "quiz-review") is saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
 """
 from contextlib import asynccontextmanager
