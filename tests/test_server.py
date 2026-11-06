@@ -77,3 +77,19 @@ def test_preflight_allows_the_kind_header(client):
         "Access-Control-Request-Headers": "content-type,x-file-path,x-mathesis-kind",
         "Access-Control-Request-Private-Network": "true"})
     assert r.status_code == 200
+
+
+def test_userscripts_are_served_and_path_traversal_is_refused(tmp_path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "a.user.js").write_text("// ==UserScript==\n// @version abc\n// ==/UserScript==\n")
+    (tmp_path / "secret.user.js").write_text("nope")
+    settings = Settings(root=tmp_path.resolve(), userscript_dir=scripts, summarize=False, notify=False)
+    with TestClient(server.create_app(settings)) as c:
+        r = c.get("/userscript/a.user.js")
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
+        assert "@version abc" in r.text
+        assert c.get("/userscript").json() == {"scripts": ["a.user.js"]}
+        assert c.get("/userscript/missing.user.js").status_code == 404
+        assert c.get("/userscript/..%2Fsecret.user.js").status_code == 404
+        assert c.get("/userscript/a.txt").status_code == 404

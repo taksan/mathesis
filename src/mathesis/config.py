@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_ROOT = "/home/takeuchi/projects/obsidian-takvault/_study_roadmap"
+DEFAULT_USERSCRIPTS = Path(__file__).resolve().parents[2] / "userscript"  # the repo folder (source checkout)
 
 
 def _flag(name: str, default: bool) -> bool:
@@ -16,6 +17,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 5000
     root: Path = Path(DEFAULT_ROOT)        # only files inside this folder may be written
+    userscript_dir: Path = DEFAULT_USERSCRIPTS  # *.user.js served at /userscript/<name> (install / update URL)
     ollama_url: str = "http://172.17.0.1:11434"
     model: str = "gemma4:12b"              # used for every stage of the pipeline
     embed_model: str = "bge-m3:latest"     # finds which lesson a quiz question comes from
@@ -35,6 +37,7 @@ class Settings:
             host=e("MATHESIS_HOST", cls.host),
             port=int(e("MATHESIS_PORT", cls.port)),
             root=Path(e("MATHESIS_ROOT", DEFAULT_ROOT)).expanduser().resolve(),
+            userscript_dir=Path(e("MATHESIS_USERSCRIPT_DIR", DEFAULT_USERSCRIPTS)).expanduser().resolve(),
             ollama_url=e("MATHESIS_OLLAMA_URL", cls.ollama_url).rstrip("/"),
             model=e("MATHESIS_MODEL", cls.model),
             embed_model=e("MATHESIS_EMBED_MODEL", cls.embed_model),

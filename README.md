@@ -29,6 +29,15 @@ Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds 
 
 On a **quiz** page the button reads "Copy Quiz": the userscript saves a readable Markdown copy (numbered questions, `- [ ]` options, your selected option checked) as `NN-<quiz title>.md` and tells the server it is a quiz (`X-Mathesis-Kind: quiz`), so no summary is made.
 
+## Installing the userscripts from the server
+
+With `mathesis serve` running, install each script with **Install from URL** (Tampermonkey: Utilities; Violentmonkey: "+" > Install from URL):
+
+- `http://127.0.0.1:5000/userscript/mathesis.user.js` (Google Skills)
+- `http://127.0.0.1:5000/userscript/mathesis-udemy.user.js` (Udemy)
+
+`GET /userscript` lists them. They carry `@updateURL`/`@downloadURL` pointing at the same address, and the server reads the file on every request. `MATHESIS_USERSCRIPT_DIR` changes the folder (default: `userscript/` of the checkout). `@version` is the git sha of the commit that last changed the script.
+
 ## Udemy
 
 `userscript/mathesis-udemy.user.js` saves Udemy lectures to `Udemy/<course>/<NN>-<lecture>.md` through the same server (summaries included).

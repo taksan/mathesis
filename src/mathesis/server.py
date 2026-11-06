@@ -3,13 +3,15 @@
 POST /write   Header X-File-Path: absolute path of the .md file; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); any other kind ("quiz", "quiz-review") is saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
+GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript lists them
 """
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from .config import Settings
@@ -56,6 +58,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.root not in target.parents:
             raise ApiError(403, f"path outside {settings.root}")
         return target
+
+    @app.get("/userscript")
+    def userscripts():
+        d = settings.userscript_dir
+        return {"scripts": sorted(f.name for f in d.glob("*.user.js")) if d.is_dir() else []}
+
+    @app.get("/userscript/{name}")
+    def userscript(name: str):
+        """Read on every request, so a reinstall / update check always sees the current file."""
+        file = settings.userscript_dir / name
+        if not re.fullmatch(r"[\w.-]+\.user\.js", name) or not file.is_file():
+            raise ApiError(404, f"no userscript named {name}")
+        return Response(file.read_text(encoding="utf-8"), media_type="text/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-cache"})
 
     @app.get("/status")
     def status(x_file_path: str | None = Header(None)):
