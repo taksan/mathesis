@@ -88,6 +88,14 @@
   // and quizresponse (the learner's selections, choiceId per question once answered).
   const isQuiz = () => !!document.querySelector('ql-quiz');
 
+  // "HTML bundle" lessons (documents) live in an iframe on another origin, so the page itself holds no text:
+  // the server reads the lesson from the bundle URL, converts it to Markdown and summarizes it.
+  const bundleSrc = () => {
+    const frame = document.querySelector('ql-iframe[src*="storage.googleapis.com/cloud-training/"]');
+    return frame ? frame.getAttribute('src') : null;
+  };
+  const isBundle = () => !isQuiz() && !!bundleSrc();
+
   function formatQuiz(version, response, title) {
     const items = (version && version.quizItems) || [];
     const answers = new Map(((response && response.itemResponses) || []).map((r) => [String(r.quizItemId), r]));
@@ -129,6 +137,7 @@
 
   function getTranscript() {
     if (isQuiz()) return getQuiz();
+    if (isBundle()) return bundleSrc();
     const video = document.querySelector('ql-youtube-video');
     if (video) {
       const transcript = readJsonAttr(video, 'transcript');
@@ -168,7 +177,7 @@
 
   const button = document.createElement('button');
   button.id = 'copy-transcript-btn';
-  const LABEL = () => (isQuiz() ? 'Copy Quiz' : 'Copy Transcript');
+  const LABEL = () => (isQuiz() ? 'Copy Quiz' : isBundle() ? 'Copy Lesson' : 'Copy Transcript');
   button.textContent = LABEL();
 
   // Show whether this lesson was already saved (green) or not (red); grey = server unreachable.
@@ -197,7 +206,7 @@
   }
 
   button.addEventListener('click', () => {
-    let kind = isQuiz() ? 'quiz' : 'transcript';
+    let kind = isQuiz() ? 'quiz' : isBundle() ? 'bundle' : 'transcript';
     let text = getTranscript();
     let filePath;
     if (text === RAW) {
@@ -216,9 +225,11 @@
       }
     }
 
-    navigator.clipboard.writeText(text)
-      .then(() => console.log('Text copied'))
-      .catch((error) => alert('Could not copy text to clipboard: ' + error));
+    if (kind !== 'bundle') { // for a bundle the body is only the lesson URL; the server writes the Markdown
+      navigator.clipboard.writeText(text)
+        .then(() => console.log('Text copied'))
+        .catch((error) => alert('Could not copy text to clipboard: ' + error));
+    }
 
     fetch('http://127.0.0.1:5000/write', {
       method: 'POST',
@@ -233,7 +244,9 @@
         console.log('Success:', data);
         if (kind !== 'raw') setButtonState('saved', false);
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
-          : kind === 'quiz' ? 'Quiz saved!' : 'Transcript sent successfully!');
+          : kind === 'quiz' ? 'Quiz saved!'
+          : kind === 'bundle' ? 'Lesson converted and saved!'
+          : 'Transcript sent successfully!');
       })
       .catch((error) => {
         console.error('Error:', error);

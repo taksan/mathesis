@@ -116,3 +116,30 @@ def test_raw_page_is_saved_as_html_and_never_summarized(tmp_path, monkeypatch):
         bad = c.post("/write", content=b"x", headers={"X-File-Path": "Udemy/Course/x.md", "X-Mathesis-Kind": "raw"})
         assert bad.status_code == 400 and not (tmp_path / "Udemy/Course/x.md").exists()
     assert calls == []
+
+
+def test_bundle_is_converted_saved_and_summarized(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(server, "write_summary", lambda content, file, settings: calls.append((content, file)))
+    monkeypatch.setattr("mathesis.ollama.OllamaClient.check_model", lambda self: (True, "ok"))
+    seen = []
+    monkeypatch.setattr(server.bundle, "markdown_for", lambda src: seen.append(src) or "# Lesson\n\nconverted text here\n")
+    app = server.create_app(Settings(root=tmp_path.resolve(), summarize=True, notify=False))
+    with TestClient(app) as c:
+        r = c.post("/write", content=b"https://storage.googleapis.com/cloud-training/x/index.html#/page/abc",
+                   headers={"X-File-Path": "Google Skills/P/C/08-Lesson.md", "X-Mathesis-Kind": "bundle"})
+        assert r.status_code == 200 and r.json()["kind"] == "bundle"
+    target = tmp_path / "Google Skills/P/C/08-Lesson.md"
+    assert target.read_text() == "# Lesson\n\nconverted text here\n"
+    assert seen == ["https://storage.googleapis.com/cloud-training/x/index.html#/page/abc"]
+    assert calls == [("# Lesson\n\nconverted text here\n", str(target))]
+
+
+def test_bundle_failure_is_reported_and_nothing_is_written(tmp_path, monkeypatch):
+    def boom(src):
+        raise server.bundle.BundleError(502, "could not read components.json")
+    monkeypatch.setattr(server.bundle, "markdown_for", boom)
+    with TestClient(server.create_app(Settings(root=tmp_path.resolve(), summarize=False, notify=False))) as c:
+        r = c.post("/write", content=b"https://x", headers={"X-File-Path": "a/b.md", "X-Mathesis-Kind": "bundle"})
+    assert r.status_code == 502 and "components.json" in r.json()["error"]
+    assert not (tmp_path / "a").exists()

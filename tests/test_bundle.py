@@ -1,0 +1,110 @@
+import pytest
+
+from mathesis import bundle
+
+SRC = "https://storage.googleapis.com/cloud-training/T-X/3.0/My%20Course%20(2)/index.html#/page/" + "a" * 24
+PAGE = "a" * 24
+
+
+def course():
+    def comp(_id, parent, order, **kw):
+        return {"_id": _id, "_parentId": parent, "_sortOrder": order, **kw}
+    return {
+        "contentObjects": [
+            {"_id": "d" * 24, "_type": "menu", "_parentId": "c" * 24, "_sortOrder": 1},
+            {"_id": PAGE, "_type": "page", "_parentId": "d" * 24, "_sortOrder": 1,
+             "title": "editor title", "displayTitle": "Operational&nbsp;excellence"},
+            {"_id": "b" * 24, "_type": "page", "_parentId": "d" * 24, "_sortOrder": 2, "displayTitle": "Second"},
+        ],
+        "articles": [comp("art1", PAGE, 1, displayTitle="Operational excellence"),
+                     comp("art2", "b" * 24, 1, displayTitle="Other")],
+        "blocks": [comp("blk1", "art1", 1, displayTitle="Use case"), comp("blk2", "art1", 2),
+                   comp("blk3", "art2", 1)],
+        "components": [
+            comp("c1", "blk1", 2, _component="accordion", title="editor label", instruction="Select the item to learn more.",
+                 _items=[{"title": "<strong>Principals</strong>", "body": "<p>The <strong>who</strong>: an identity.</p>"},
+                         {"title": "Roles", "body": "<ul><li>basic</li><li>predefined</li></ul>"}]),
+            comp("c0", "blk1", 1, _component="text", body="<p>Intro with project_id and *stars*.&nbsp;</p><p><br></p>",
+                 displayTitle="Add subtitle or remove"),
+            comp("c2", "blk2", 1, _component="videoStream", body="<p>Watch the video.</p>",
+                 _transcript={"button": "Open transcript", "body": "<p>You are heading to e-commerce.</p>"}),
+            comp("c3", "blk2", 2, _component="code", _codeString="SELECT 1;", _codeLanguage="sql"),
+            comp("c4", "blk2", 3, _component="table", _rows=[["Pillar", "Goal"], ["Cost", "a|b"]]),
+            comp("c5", "blk2", 4, _component="mcq", body="<p>Which is right?</p>",
+                 _items=[{"text": "Yes", "_shouldBeSelected": True}, {"text": "No", "_shouldBeSelected": False}]),
+            comp("c6", "blk2", 5, _component="text", body="<p>[Add text]</p>"),
+            comp("c7", "blk2", 6, _component="text", body="<p>hidden</p>", _isHidden=True),
+            comp("c8", "blk3", 1, _component="text", body="<p>text of another page here</p>"),
+        ],
+    }
+
+
+def fetch_from(data, calls=None):
+    def fetch(url):
+        if calls is not None:
+            calls.append(url)
+        name = url.rsplit("/", 1)[-1][:-5]
+        if name == "config":
+            raise bundle.BundleError(404, "none")
+        return data[name]
+    return fetch
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    bundle._cache.clear()
+
+
+def test_parse_src_accepts_only_google_training_bundles():
+    base, page = bundle.parse_src(SRC)
+    assert base == "https://storage.googleapis.com/cloud-training/T-X/3.0/My%20Course%20(2)" and page == PAGE
+    for bad in ["https://evil.example/cloud-training/x/index.html#/page/" + "a" * 24,
+                "http://storage.googleapis.com/cloud-training/x/index.html#/page/" + "a" * 24,
+                "https://storage.googleapis.com/other-bucket/x/index.html#/page/" + "a" * 24,
+                "https://storage.googleapis.com/cloud-training/../x/index.html#/page/" + "a" * 24,
+                "https://storage.googleapis.com/cloud-training/x/index.html"]:
+        with pytest.raises(bundle.BundleError) as e:
+            bundle.parse_src(bad)
+        assert e.value.status == 400
+
+
+def test_page_is_rendered_in_reading_order_as_markdown():
+    md = bundle.markdown_for(SRC, fetch_from(course()))
+    assert md.startswith("# Operational excellence\n")           # entity decoded
+    assert "## Operational excellence" not in md                  # article title equal to the page title is not repeated
+    assert "### Use case" in md
+    assert md.index("Intro with project_id and *stars*.") < md.index("**Principals**")   # sort order, no escaping
+    assert "**Principals**\n\nThe **who**: an identity." in md
+    assert "- basic\n- predefined" in md
+    assert "Transcript: You are heading to e-commerce." in md
+    assert "```sql\nSELECT 1;\n```" in md
+    assert "| Pillar | Goal |\n| --- | --- |\n| Cost | a\\|b |" in md
+    assert "- ✅ Yes\n\n- ⬜ No" in md or "- ✅ Yes\n- ⬜ No" in md
+    for absent in ("editor label", "editor title", "Select the item", "[Add text]", "Add subtitle", "hidden", "another page", "&nbsp;"):
+        assert absent not in md
+
+
+def test_a_menu_id_renders_every_page_below_it_and_unknown_ids_fail():
+    src = SRC.replace("a" * 24, "d" * 24)
+    md = bundle.markdown_for(src, fetch_from(course()))
+    assert "# Operational excellence" in md and "# Second" in md and "another page" in md
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.markdown_for(SRC.replace("a" * 24, "f" * 24), fetch_from(course()))
+    assert e.value.status == 404
+
+
+def test_course_json_is_cached_between_lessons():
+    calls = []
+    fetch = fetch_from(course(), calls)
+    bundle.markdown_for(SRC, fetch)
+    n = len(calls)
+    bundle.markdown_for(SRC.replace("a" * 24, "b" * 24), fetch)
+    assert len(calls) == n
+
+
+def test_empty_page_is_an_error():
+    data = course()
+    data["components"] = []
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.markdown_for(SRC, fetch_from(data))
+    assert e.value.status == 422

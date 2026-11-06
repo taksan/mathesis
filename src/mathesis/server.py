@@ -1,7 +1,8 @@
 """HTTP API used by the userscript.
 
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
-              Header X-Mathesis-Kind: "transcript" (default, gets a summary); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
+              Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
+              fetches the lesson, converts it to Markdown, saves it and summarizes it); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
 """
@@ -14,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from . import bundle
 from .config import Settings
 from .notify import notify
 from .ollama import OllamaClient
@@ -95,6 +97,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if kind == "raw" and target.suffix != ".html":
             raise ApiError(400, "raw saves must use an .html path")
         content = await request.body()
+        if kind == "bundle":
+            try:
+                content = (await run_in_threadpool(bundle.markdown_for, content.decode("utf-8", "replace"))).encode("utf-8")
+            except bundle.BundleError as e:
+                notify("Lesson conversion failed", f"{target.name}: {e.message}", error=True, enabled=settings.notify)
+                raise ApiError(e.status, e.message)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
@@ -104,7 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print(f"saved {kind} {len(content)} bytes -> {target}")
         if settings.notify_on_save:
             notify("Transcript saved", target.stem, enabled=settings.notify)
-        if settings.summarize and content.strip() and kind == "transcript":
+        if settings.summarize and content.strip() and kind in ("transcript", "bundle"):
             background.add_task(write_summary, content.decode("utf-8", "replace"), str(target), settings)
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind}
 
