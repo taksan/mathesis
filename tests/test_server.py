@@ -53,3 +53,27 @@ def test_summary_runs_in_background_when_enabled(tmp_path, monkeypatch):
         c.post("/write", content=b"transcript", headers={"X-File-Path": str(target)})
         c.post("/write", content=b"   ", headers={"X-File-Path": str(target)})   # blank content: no summary
     assert calls == [("transcript", str(target))]
+
+
+def test_quiz_is_saved_but_never_summarized(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(server, "write_summary", lambda content, file, settings: calls.append(file))
+    monkeypatch.setattr("mathesis.ollama.OllamaClient.check_model", lambda self: (True, "ok"))
+    app = server.create_app(Settings(root=tmp_path.resolve(), summarize=True, notify=False))
+    with TestClient(app) as c:
+        quiz = tmp_path.resolve() / "P" / "C" / "36-Final Assessment.md"
+        r = c.post("/write", content="# Final Assessment\n".encode(),
+                   headers={"X-File-Path": str(quiz), "X-Mathesis-Kind": "quiz"})
+        assert r.json()["kind"] == "quiz" and quiz.read_text() == "# Final Assessment\n"
+        lesson = tmp_path.resolve() / "P" / "C" / "01-L.md"
+        c.post("/write", content=b"text", headers={"X-File-Path": str(lesson), "X-Mathesis-Kind": "transcript"})
+        c.post("/write", content=b"text", headers={"X-File-Path": str(lesson.with_name("02-M.md"))})   # no header = transcript
+    assert calls == [str(lesson), str(lesson.with_name("02-M.md"))]
+
+
+def test_preflight_allows_the_kind_header(client):
+    r = client.options("/write", headers={
+        "Origin": "https://partner.skills.google", "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type,x-file-path,x-mathesis-kind",
+        "Access-Control-Request-Private-Network": "true"})
+    assert r.status_code == 200

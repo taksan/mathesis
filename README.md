@@ -27,6 +27,8 @@ mathesis doctor
 
 Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds a button under the profile avatar: red = not saved yet, green = saved (with summary).
 
+On a **quiz** page the button reads "Copy Quiz": the userscript saves a readable Markdown copy (numbered questions, `- [ ]` options, your selected option checked) as `NN-<quiz title>.md` and tells the server it is a quiz (`X-Mathesis-Kind: quiz`), so no summary is made.
+
 `summarize` skips files that already have a summary (`--force` to overwrite). Useful flags: `--model`, `--single` (one call with the original prompt), `--no-revise`; `serve` also takes `--no-reload`, `--no-summary`, `--no-notify`, `--host`, `--port`, `--root`.
 
 ## Configuration
@@ -35,10 +37,11 @@ Environment variables (command-line flags override them):
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MATHESIS_ROOT` | the Obsidian `Google Skills` folder | the only folder the server may write into |
+| `MATHESIS_ROOT` | the Obsidian `_study_roadmap` folder (holds `Google Skills/` and `Udemy/`) | the only folder the server may write into |
 | `MATHESIS_MODEL` | `gemma4:12b` | Ollama model used for every stage |
 | `MATHESIS_OLLAMA_URL` | `http://172.17.0.1:11434` | Ollama server |
 | `MATHESIS_NUM_CTX` | `16384` | context window (Ollama's default of 2048 truncates transcripts) |
+| `MATHESIS_EMBED_MODEL` | `bge-m3:latest` | embedding model that finds which lesson a quiz question comes from |
 | `MATHESIS_PIPELINE` | `two-stage` | or `single` |
 | `MATHESIS_MAX_REVISIONS` | `2` | completeness revision rounds |
 | `MATHESIS_HOST` / `MATHESIS_PORT` | `127.0.0.1` / `5000` | server address |

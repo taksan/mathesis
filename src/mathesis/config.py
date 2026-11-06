@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_ROOT = "/home/takeuchi/projects/obsidian-takvault/_study_roadmap/Google Skills"
+DEFAULT_ROOT = "/home/takeuchi/projects/obsidian-takvault/_study_roadmap"
 
 
 def _flag(name: str, default: bool) -> bool:
@@ -18,6 +18,7 @@ class Settings:
     root: Path = Path(DEFAULT_ROOT)        # only files inside this folder may be written
     ollama_url: str = "http://172.17.0.1:11434"
     model: str = "gemma4:12b"              # used for every stage of the pipeline
+    embed_model: str = "bge-m3:latest"     # finds which lesson a quiz question comes from
     num_ctx: int = 16384                   # Ollama's default (2048) would silently truncate transcripts
     summarize: bool = True
     notify: bool = True
@@ -36,6 +37,7 @@ class Settings:
             root=Path(e("MATHESIS_ROOT", DEFAULT_ROOT)).expanduser().resolve(),
             ollama_url=e("MATHESIS_OLLAMA_URL", cls.ollama_url).rstrip("/"),
             model=e("MATHESIS_MODEL", cls.model),
+            embed_model=e("MATHESIS_EMBED_MODEL", cls.embed_model),
             num_ctx=int(e("MATHESIS_NUM_CTX", cls.num_ctx)),
             summarize=_flag("MATHESIS_SUMMARIZE", True),
             notify=_flag("MATHESIS_NOTIFY", True),

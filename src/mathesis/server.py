@@ -1,6 +1,7 @@
 """HTTP API used by the userscript.
 
-POST /write   Header X-File-Path: absolute path of the .md file; body: the transcript (UTF-8)
+POST /write   Header X-File-Path: absolute path of the .md file; body: the content (UTF-8)
+              Header X-Mathesis-Kind: "transcript" (default, gets a summary) or "quiz" (saved as is)
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool}
 """
 from contextlib import asynccontextmanager
@@ -39,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-File-Path"],
+        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind"],
         allow_private_network=True,  # Chrome's Private Network Access preflight (public site -> 127.0.0.1)
     )
 
@@ -63,8 +64,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"exists": target.is_file(), "summary_exists": summary_path(target).is_file()}
 
     @app.post("/write")
-    async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None)):
+    async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
+                    x_mathesis_kind: str | None = Header(None)):
+        """X-Mathesis-Kind: "transcript" (default) is summarized; "quiz" is only saved."""
         target = target_path(x_file_path)
+        kind = (x_mathesis_kind or "transcript").strip().lower()
         content = await request.body()
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -72,12 +76,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except OSError as e:
             notify("Transcript save failed", f"{target.name}: {e}", error=True, enabled=settings.notify)
             raise ApiError(500, str(e))
-        print(f"saved {len(content)} bytes -> {target}")
+        print(f"saved {kind} {len(content)} bytes -> {target}")
         if settings.notify_on_save:
             notify("Transcript saved", target.stem, enabled=settings.notify)
-        if settings.summarize and content.strip():
+        if settings.summarize and content.strip() and kind == "transcript":
             background.add_task(write_summary, content.decode("utf-8", "replace"), str(target), settings)
-        return {"status": "ok", "path": str(target), "bytes": len(content)}
+        return {"status": "ok", "path": str(target), "bytes": len(content), "kind": kind}
 
     return app
 

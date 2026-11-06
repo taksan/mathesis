@@ -82,7 +82,44 @@
     return paragraphs.join('\n\n');
   }
 
+  // A quiz page keeps its data in JSON attributes of <ql-quiz>: quizversion (questions and options, no answers)
+  // and quizresponse (the learner's selections, choiceId per question once answered).
+  const isQuiz = () => !!document.querySelector('ql-quiz');
+
+  function formatQuiz(version, response, title) {
+    const items = (version && version.quizItems) || [];
+    const answers = new Map(((response && response.itemResponses) || []).map((r) => [String(r.quizItemId), r]));
+    const letter = (i) => String.fromCharCode(65 + i);
+    const lines = [title ? `# ${title}` : '# Quiz', ''];
+    const facts = [`${items.length} questions`, 'multiple choice'];
+    if (version && version.passingPercentage) facts.push(`passing score ${parseFloat(version.passingPercentage)}%`);
+    lines.push(`*${facts.join(' · ')}*`, '');
+    items.forEach((item, n) => {
+      const chosen = answers.get(String(item.id));
+      lines.push(`## ${n + 1}. ${item.stem.trim()}`, '');
+      (item.options || []).forEach((o, i) => {
+        const picked = chosen && chosen.choiceId && String(chosen.choiceId) === String(o.id);
+        lines.push(`- [${picked ? 'x' : ' '}] **${letter(i)}.** ${o.title.trim()}`);
+      });
+      lines.push('');
+    });
+    return lines.join('\n');
+  }
+
+  function getQuiz() {
+    const quiz = document.querySelector('ql-quiz');
+    const version = readJsonAttr(quiz, 'quizversion');
+    if (!version || !(version.quizItems || []).length) {
+      alert('Quiz questions not found');
+      return null;
+    }
+    const menu = document.querySelector('ql-contents-menu');
+    const title = (menu && menu.getAttribute('selectedcontenttitle')) || 'Quiz';
+    return formatQuiz(version, readJsonAttr(quiz, 'quizresponse'), title);
+  }
+
   function getTranscript() {
+    if (isQuiz()) return getQuiz();
     const video = document.querySelector('ql-youtube-video');
     if (video) {
       const transcript = readJsonAttr(video, 'transcript');
@@ -125,7 +162,8 @@
 
   const button = document.createElement('button');
   button.id = 'copy-transcript-btn';
-  button.textContent = 'Copy Transcript';
+  const LABEL = () => (isQuiz() ? 'Copy Quiz' : 'Copy Transcript');
+  button.textContent = LABEL();
 
   // Show whether this lesson was already saved (green) or not (red); grey = server unreachable.
   function setButtonState(state, summaryDone) {
@@ -133,8 +171,8 @@
     button.classList.toggle('unknown', state === 'unknown');
     button.textContent =
       state === 'saved' ? `✓ Saved${summaryDone ? ' + summary' : ''} (copy again)` :
-      state === 'unknown' ? 'Copy Transcript (server offline)' :
-      'Copy Transcript';
+      state === 'unknown' ? `${LABEL()} (server offline)` :
+      LABEL();
   }
 
   let lastChecked = null;
@@ -174,6 +212,7 @@
       headers: {
         'Content-Type': 'text/plain',
         'X-File-Path': filePath,
+        'X-Mathesis-Kind': isQuiz() ? 'quiz' : 'transcript',
       },
       body: transcription,
     })
@@ -184,7 +223,7 @@
       .then((data) => {
         console.log('Success:', data);
         setButtonState('saved', false);
-        alert('Transcript sent successfully!');
+        alert(isQuiz() ? 'Quiz saved!' : 'Transcript sent successfully!');
       })
       .catch((error) => {
         console.error('Error:', error);

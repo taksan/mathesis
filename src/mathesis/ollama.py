@@ -8,6 +8,7 @@ from .config import Settings
 class OllamaClient:
     def __init__(self, settings: Settings):
         self.url, self.model, self.num_ctx = settings.ollama_url, settings.model, settings.num_ctx
+        self.embed_model = settings.embed_model
 
     def installed_models(self) -> list[str]:
         with urllib.request.urlopen(f"{self.url}/api/tags", timeout=10) as resp:
@@ -22,6 +23,14 @@ class OllamaClient:
         if self.model not in names:
             return False, f"model {self.model!r} is not installed. Installed: {', '.join(names)}"
         return True, f"model {self.model} is installed"
+
+    def embed(self, texts: list[str], model: str | None = None) -> list[list[float]]:
+        """Embeddings for a batch of texts (default: the configured embedding model)."""
+        payload = {"model": model or self.embed_model, "input": texts}
+        req = urllib.request.Request(f"{self.url}/api/embed", data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            return json.load(resp)["embeddings"]
 
     def chat(self, system: str, user: str, temperature: float = 0.2) -> str:
         """One chat call. Raises if Ollama answers with a different model than the configured one."""
