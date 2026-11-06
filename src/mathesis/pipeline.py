@@ -12,6 +12,7 @@ from pathlib import Path
 from . import coverage
 from .config import Settings
 from .notify import notify
+from .obsidian import open_in_obsidian
 from .ollama import OllamaClient
 
 PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
@@ -85,7 +86,8 @@ def write_summary(content: str, file: str | Path, settings: Settings) -> None:
         out = summary_path(file)
         out.write_text(render(notes, info, settings), encoding="utf-8")
         print(f"Summary written to {out}")
-        notify("Summary ready", Path(file).stem, enabled=settings.notify)
+        on_click = (lambda: open_in_obsidian(out, settings.obsidian_command)) if settings.obsidian_open else None
+        notify("Summary ready", Path(file).stem, enabled=settings.notify, on_click=on_click)
     except Exception as e:
         print(f"Error generating summary for {file}: {e}")
         notify("Summary failed", f"{Path(file).stem}: {e}", error=True, enabled=settings.notify)

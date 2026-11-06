@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import Settings
+from .obsidian import find_command, open_in_obsidian
 from .ollama import OllamaClient
 from .pipeline import PROMPT_DIR, render, summarize, summary_path
 
@@ -28,6 +29,8 @@ def _settings(args) -> Settings:
         overrides["max_revisions"] = 0
     if getattr(args, "no_summary", False):
         overrides["summarize"] = False
+    if getattr(args, "no_open", False):
+        overrides["obsidian_open"] = False
     if getattr(args, "no_notify", False):
         overrides["notify"] = False
     return dataclasses.replace(s, **overrides)
@@ -43,7 +46,8 @@ def cmd_serve(args) -> int:
         "MATHESIS_MODEL": s.model, "MATHESIS_OLLAMA_URL": s.ollama_url, "MATHESIS_NUM_CTX": str(s.num_ctx),
         "MATHESIS_SUMMARIZE": "1" if s.summarize else "0", "MATHESIS_NOTIFY": "1" if s.notify else "0",
         "MATHESIS_NOTIFY_ON_SAVE": "1" if s.notify_on_save else "0", "MATHESIS_PIPELINE": s.pipeline,
-        "MATHESIS_MAX_REVISIONS": str(s.max_revisions),
+        "MATHESIS_MAX_REVISIONS": str(s.max_revisions), "MATHESIS_OBSIDIAN_OPEN": "1" if s.obsidian_open else "0",
+        **({"MATHESIS_OBSIDIAN": s.obsidian_command} if s.obsidian_command else {}),
     })
     package_dir = str(Path(__file__).resolve().parent)
     uvicorn.run("mathesis.server:app", host=s.host, port=s.port, reload=not args.no_reload,
@@ -116,12 +120,40 @@ def cmd_doctor(args) -> int:
     report(not missing, f"prompts in {PROMPT_DIR}" + (f" (missing: {', '.join(missing)})" if missing else ""))
     report(True if shutil.which("notify-send") else None,
            "notify-send " + ("found" if shutil.which("notify-send") else "not found: no desktop notifications"))
+    opener = find_command(s.obsidian_command)
+    report(True if opener else None, "Obsidian opener: " + (" ".join(opener) if opener else
+           "not found (notification click will not open Obsidian; set MATHESIS_OBSIDIAN)"))
     with socket.socket() as sock:
         sock.settimeout(0.5)
         busy = sock.connect_ex((s.host, s.port)) == 0
     report(None if busy else True, f"port {s.port} " + ("is already in use (another server running?)" if busy else "is free"))
     print(f"\nmodel={s.model} pipeline={s.pipeline} max_revisions={s.max_revisions} num_ctx={s.num_ctx}")
+    if args.click_test:
+        bad += _click_test(s)
     return 1 if bad else 0
+
+
+def _click_test(s: Settings, wait: int = 120) -> int:
+    """Fire a real notification whose click opens an existing summary in Obsidian, and wait for the click."""
+    import time
+    from .notify import notify
+    target = next(iter(sorted(s.root.rglob("*-summary.md"))), None)
+    if target is None:
+        print("click test: no *-summary.md found under the notes folder")
+        return 1
+    clicked = []
+
+    def on_click():
+        clicked.append(True)
+        print(f"clicked: opening {target.name} in Obsidian ->", "ok" if open_in_obsidian(target, s.obsidian_command) else "FAILED")
+
+    print(f"click test: a notification appeared; click it (or its button) within {wait}s to open {target.name} in Obsidian ...")
+    thread = notify("Mathesis test: click me", f"Opens {target.name} in Obsidian", on_click=on_click, enabled=s.notify)
+    if thread:
+        thread.join(wait)
+    if not clicked:
+        print("click test: no click received")
+    return 0 if clicked else 1
 
 
 # ---------------------------------------------------------------- parser
@@ -141,6 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--no-reload", action="store_true", help="disable hot reload")
     sv.add_argument("--no-summary", action="store_true", help="only save transcripts, no Ollama summaries")
     sv.add_argument("--no-notify", action="store_true", help="no desktop notifications")
+    sv.add_argument("--no-open", dest="no_open", action="store_true", help="notification click does not open Obsidian")
     sv.add_argument("--single", action="store_true", help="one-call pipeline with the original prompt")
     sv.set_defaults(func=cmd_serve)
 
@@ -156,6 +189,8 @@ def build_parser() -> argparse.ArgumentParser:
     dr = sub.add_parser("doctor", help="check Ollama, the model, folders, prompts and notifications")
     common(dr)
     dr.add_argument("--host"), dr.add_argument("--port", type=int)
+    dr.add_argument("--click-test", action="store_true",
+                    help="also fire a notification and check that clicking it opens a summary in Obsidian")
     dr.set_defaults(func=cmd_doctor)
     return p
 

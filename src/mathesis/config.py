@@ -24,6 +24,8 @@ class Settings:
     notify_on_save: bool = False           # also notify when the raw transcript is saved
     pipeline: str = "two-stage"            # "two-stage" or "single"
     max_revisions: int = 2
+    obsidian_open: bool = True             # "Summary ready" notification opens the summary in Obsidian when clicked
+    obsidian_command: str | None = None    # command that hands an obsidian:// URI to Obsidian (auto-detected if unset)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -40,4 +42,6 @@ class Settings:
             notify_on_save=_flag("MATHESIS_NOTIFY_ON_SAVE", False),
             pipeline=e("MATHESIS_PIPELINE", cls.pipeline),
             max_revisions=int(e("MATHESIS_MAX_REVISIONS", cls.max_revisions)),
+            obsidian_open=_flag("MATHESIS_OBSIDIAN_OPEN", True),
+            obsidian_command=e("MATHESIS_OBSIDIAN") or None,
         )
