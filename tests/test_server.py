@@ -149,3 +149,12 @@ def test_bundle_failure_is_reported_and_nothing_is_written(tmp_path, monkeypatch
         r = c.post("/write", content=b"https://x", headers={"X-File-Path": "a/b.md", "X-Mathesis-Kind": "bundle"})
     assert r.status_code == 502 and "components.json" in r.json()["error"]
     assert not (tmp_path / "a").exists()
+
+
+def test_percent_encoded_path_with_non_ascii_title(client):
+    from urllib.parse import quote
+    name = "Udemy/Curso/05-Prática – Quiz 1 - incorrect.md"
+    r = client.post("/write", content=b"x", headers={"X-File-Path": quote(name), "X-Mathesis-Kind": "quiz-review"})
+    assert r.status_code == 200 and (client.root / name).read_text() == "x"
+    assert client.get("/status", headers={"X-File-Path": quote(name)}).json()["exists"] is True
+    assert client.post("/write", content=b"x", headers={"X-File-Path": quote("../x.md")}).status_code == 403

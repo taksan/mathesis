@@ -287,7 +287,7 @@
   openButton.addEventListener('click', () => {
     let filePath;
     try { filePath = computePathToWrite(); } catch (e) { return; }
-    fetch(`${SERVER}/status`, { headers: { 'X-File-Path': filePath } })
+    fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
       .then((r) => r.json())
       .then((d) => {
         if (d.obsidian_uri) window.location.href = d.obsidian_uri;
@@ -312,7 +312,7 @@
     let filePath;
     try { filePath = computePathToWrite(); } catch (e) { return; } // page still loading; retried below
     lastChecked = filePath;
-    fetch(`${SERVER}/status`, { headers: { 'X-File-Path': filePath } })
+    fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
       .then((r) => r.json())
       .then((d) => { if (lastChecked === filePath) setButtonState(d.exists ? 'saved' : 'new', d.summary_exists); })
       .catch(() => {
@@ -347,11 +347,13 @@
 
     fetch(`${SERVER}/write`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'X-File-Path': filePath, 'X-Mathesis-Kind': kind },
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind },
       body: text,
     })
       .then((response) => {
-        if (!response.ok) throw new Error('Network response was not ok ' + response.statusText);
+        if (!response.ok) { // show the server's reason (it answers {"error": "..."})
+          return response.json().catch(() => ({})).then((d) => { throw new Error(d.error || response.status + ' ' + response.statusText); });
+        }
         return response.json();
       })
       .then((data) => {

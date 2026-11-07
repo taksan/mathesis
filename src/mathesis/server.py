@@ -10,6 +10,7 @@ GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @up
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """X-File-Path is relative to the configured root ("Google Skills/Path/Course/01-Lesson.md")."""
         if not raw_path:
             raise ApiError(400, "missing X-File-Path header")
+        raw_path = unquote(raw_path)  # userscripts send it percent-encoded: titles may hold non-ASCII characters
         if Path(raw_path).is_absolute() or raw_path.startswith(("/", "\\")):
             raise ApiError(400, "X-File-Path must be relative to the Mathesis root (update the userscript)")
         target = (settings.root / raw_path).resolve()
