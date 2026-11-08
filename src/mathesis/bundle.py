@@ -35,7 +35,7 @@ def parse_src(src: str) -> tuple[str, str]:
         raise BundleError(400, f"not a Google training bundle URL: {src[:80]}")
     page = re.match(r"/(?:page|id)/([0-9a-f]{24})", parts.fragment)
     if not page:
-        raise BundleError(400, "the bundle URL has no #/page/<id>")
+        raise BundleError(400, f"the bundle URL has no #/page/<id>: {src[:200]}")
     path = parts.path.rsplit("/", 1)[0] if parts.path.endswith(".html") else parts.path.rstrip("/")
     return f"https://{ALLOWED_HOST}{path}", page.group(1)
 
