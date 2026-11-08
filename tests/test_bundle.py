@@ -134,3 +134,47 @@ def test_empty_page_is_an_error():
     with pytest.raises(bundle.BundleError) as e:
         bundle.markdown_for(SRC, fetch_from(data))
     assert e.value.status == 422
+
+
+# ---- Articulate Rise bundles (#/lessons/<id>)
+
+def _rise_fetch(lessons):
+    import base64, json
+    payload = base64.b64encode(json.dumps({"course": {"lessons": lessons}}).encode()).decode()
+    return lambda url: f'__jsonp("runtime-data.js","{payload}");'
+
+
+RISE = "https://storage.googleapis.com/cloud-training/cls-html5-courses/X/v1/EN/content/index.html#/lessons/lesson-aaaa1111"
+
+
+def test_rise_lesson_is_rendered_by_variant():
+    block = lambda t, v, items: {"type": t, "variant": v, "items": items}
+    lesson = {"id": "lesson-aaaa1111", "type": "blocks", "title": "Monitoring", "items": [
+        block("image", "hero", [{"heading": "<p>template banner text</p>"}]),
+        block("text", "paragraph", [{"heading": "<strong>Heading</strong>", "paragraph": "<p>Real <b>text</b> here.</p>"}]),
+        block("text", "heading", [{"heading": "<p>Golden signals</p>", "paragraph": "<p>stale unshown text</p>"}]),
+        block("list", "bulleted", [{"paragraph": "<p>one</p>"}, {"paragraph": "<p>two</p>"}]),
+        block("interactive", "accordion", [{"title": "Latency", "description": "<p>How long it takes.</p>"}]),
+        block("interactive", "flashcard", [{"front": {"type": "fullimage", "description": "Front of card 1"},
+                                            "back": {"description": "<p>Card back</p>"}}]),
+        block("multimedia", "code", [{"code": "up{job=&quot;x&quot;}"}]),
+    ]}
+    bundle._cache.clear()
+    md = bundle.markdown_for(RISE, fetch_text=_rise_fetch([lesson]))
+    assert md.startswith("# Monitoring")
+    assert "Real **text** here." in md and "### Golden signals" in md and "- one\n- two" in md
+    assert "**Latency**\n\nHow long it takes." in md and "Card back" in md and 'up{job="x"}' in md
+    for hidden in ("template banner", "Heading", "stale unshown", "Front of card"):
+        assert hidden not in md
+
+
+def test_rise_unknown_lesson_and_bad_payload():
+    import pytest
+    bundle._cache.clear()
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.markdown_for(RISE, fetch_text=_rise_fetch([]))
+    assert e.value.status == 404
+    bundle._cache.clear()
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.markdown_for(RISE, fetch_text=lambda url: "<html>")
+    assert e.value.status == 502

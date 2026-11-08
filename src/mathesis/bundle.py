@@ -6,6 +6,8 @@ embeds an Evolve/Adapt course player. Its content is plain JSON next to index.ht
 and the text fields are HTML, converted here with markdownify.
 All lessons of a course share one bundle, so the JSON is cached for a while.
 """
+import base64
+import html
 import json
 import re
 import time
@@ -33,9 +35,9 @@ def parse_src(src: str) -> tuple[str, str]:
     if parts.scheme != "https" or parts.hostname != ALLOWED_HOST or not parts.path.startswith(ALLOWED_PATH) \
             or ".." in parts.path:
         raise BundleError(400, f"not a Google training bundle URL: {src[:80]}")
-    page = re.match(r"/(?:page|id)/([0-9a-f]{24})", parts.fragment)
+    page = re.match(r"/(?:page|id)/([0-9a-f]{24})", parts.fragment) or re.match(r"/lessons/([\w-]{8,})", parts.fragment)
     if not page:
-        raise BundleError(400, f"the bundle URL has no #/page/<id>: {src[:200]}")
+        raise BundleError(400, f"the bundle URL has no #/page/<id> or #/lessons/<id>: {src[:200]}")
     path = parts.path.rsplit("/", 1)[0] if parts.path.endswith(".html") else parts.path.rstrip("/")
     return f"https://{ALLOWED_HOST}{path}", page.group(1)
 
@@ -219,11 +221,116 @@ def render_page(course: dict, page: dict) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def markdown_for(src: str, fetch=_get_json) -> str:
+# ------------------------------------------------------------------ Articulate Rise bundles
+# Other courses embed a Rise export (".../content/index.html#/lessons/<id>"): all the content is one
+# base64 JSON in runtime-data.js, course.lessons[] -> items (blocks) -> items (cards, tabs, paragraphs ...).
+
+RISE_KEYS = ("name", "heading", "title", "date", "paragraph", "description", "code", "caption")
+
+
+def _get_text(url: str) -> str:
+    try:
+        with urllib.request.urlopen(url, timeout=60) as resp:
+            return resp.read().decode("utf-8")
+    except Exception as e:
+        raise BundleError(502, f"could not read {url.rsplit('/', 1)[-1]} of the bundle: {e}")
+
+
+def load_rise(base: str, fetch_text=_get_text) -> dict:
+    cached = _cache.get("rise:" + base)
+    if cached and time.time() - cached[0] < CACHE_SECONDS:
+        return cached[1]
+    payload = re.search(r'__jsonp\("runtime-data\.js",\s*"([^"]+)"', fetch_text(f"{base}/runtime-data.js"))
+    if not payload:
+        raise BundleError(502, "runtime-data.js of the bundle has an unknown format")
+    try:
+        course = json.loads(base64.b64decode(payload.group(1)))["course"]
+    except Exception as e:
+        raise BundleError(502, f"could not decode runtime-data.js: {e}")
+    _cache["rise:" + base] = (time.time(), course)
+    return course
+
+
+def _rise_item(item: dict, out: list[str], heading: str, in_list: str | None, number: int) -> None:
+    for key in RISE_KEYS:
+        value = item.get(key)
+        if not isinstance(value, str):
+            continue
+        if key == "code":
+            if value.strip():
+                out.append(f"```\n{html.unescape(value).strip()}\n```")
+        elif key == "heading":
+            text = one_line(value)
+            if text:
+                out.append(f"{heading} {text}")
+        elif key in ("title", "name", "date"):
+            text = one_line(value)
+            if text:
+                out.append(f"**{text}**")
+        else:
+            text = to_md(value)
+            if not text:
+                continue
+            if in_list == "numbered":
+                text = f"{number}. {text}"
+            elif in_list == "bulleted":
+                text = f"- {text}"
+            out.append(text)
+    for side in ("front", "back"):  # flash cards and stacks (a front that is only an image has just an alt text)
+        card = item.get(side)
+        if isinstance(card, dict) and card.get("type") not in ("fullimage",):
+            _rise_item(card, out, heading, None, 0)
+
+
+def render_rise_lesson(lesson: dict) -> str:
+    lines = [f"# {one_line(lesson.get('title'))}"]
+    for block in lesson.get("items") or []:
+        if not isinstance(block, dict):
+            continue
+        variant = str(block.get("variant") or "")
+        heading = "####" if variant.startswith("subheading") else "###"
+        kind = block.get("type")
+        if kind == "image" and variant == "hero":  # banner: its leftover template text is not shown
+            continue
+        parts: list[str] = []
+        for number, item in enumerate(block.get("items") or [], 1):
+            if isinstance(item, dict):
+                if kind == "text":  # the variant says which fields are shown; the editor keeps stale text in the others
+                    hidden = ("heading",) if "heading" not in variant else ("paragraph",) if variant in ("heading", "subheading") else ()
+                    item = {k: v for k, v in item.items() if k not in hidden}
+                _rise_item(item, parts, heading, variant if kind == "list" else None, number)
+        if kind == "quote":
+            parts = ["> " + p.replace("\n", "\n> ") for p in parts]
+        elif kind == "list":  # consecutive list items form one list
+            parts = ["\n".join(parts)] if parts else []
+        for part in parts:
+            if part != (lines[-1] if lines else None):
+                lines += ["", part]
+    return "\n".join(lines).strip() + "\n"
+
+
+def rise_markdown(base: str, lesson_id: str, fetch_text=_get_text) -> str:
+    course = load_rise(base, fetch_text)
+    lessons = course.get("lessons") or []
+    start = next((i for i, l in enumerate(lessons) if l.get("id") == lesson_id), None)
+    if start is None:
+        raise BundleError(404, f"lesson {lesson_id} is not in the bundle")
+    if lessons[start].get("type") == "section":  # a section id: the lessons up to the next section
+        end = next((i for i in range(start + 1, len(lessons)) if lessons[i].get("type") == "section"), len(lessons))
+        chosen = lessons[start + 1:end]
+    else:
+        chosen = [lessons[start]]
+    return "\n".join(render_rise_lesson(l) for l in chosen)
+
+
+def markdown_for(src: str, fetch=_get_json, fetch_text=_get_text) -> str:
     """Markdown of the lesson an iframe src points to."""
     base, page_id = parse_src(src)
-    course = load_course(base, fetch)
-    markdown = "\n".join(render_page(course, p) for p in pages_under(course, page_id))
+    if re.match(r"/lessons/", urlsplit(src.strip()).fragment):
+        markdown = rise_markdown(base, page_id, fetch_text)
+    else:
+        course = load_course(base, fetch)
+        markdown = "\n".join(render_page(course, p) for p in pages_under(course, page_id))
     body = " ".join(l for l in markdown.splitlines() if not l.startswith("#"))
     if len(body.split()) < 3:
         raise BundleError(422, "the bundle page has no text content")
