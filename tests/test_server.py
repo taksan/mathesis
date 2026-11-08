@@ -158,3 +158,37 @@ def test_percent_encoded_path_with_non_ascii_title(client):
     assert r.status_code == 200 and (client.root / name).read_text() == "x"
     assert client.get("/status", headers={"X-File-Path": quote(name)}).json()["exists"] is True
     assert client.post("/write", content=b"x", headers={"X-File-Path": quote("../x.md")}).status_code == 403
+
+
+def test_error_reports_are_stored_listed_and_served(tmp_path):
+    import json
+    settings = Settings(root=tmp_path.resolve(), report_dir=tmp_path / "reports", summarize=False, notify=False)
+    with TestClient(server.create_app(settings)) as c:
+        assert c.get("/reports").json() == {"reports": []}
+        r = c.post("/reports", content=json.dumps({
+            "kind": "bundle", "path": "Google Skills/P/C/08-L.md", "status": 400, "error": "no #/page/<id>",
+            "url": "https://partner.skills.google/x", "title": "T", "html": "<html><script>alert(1)</script></html>",
+            "body": "https://storage.googleapis.com/cloud-training/x"}), headers={"Content-Type": "text/plain"})
+        report_id = r.json()["id"]
+        listed = c.get("/reports").json()["reports"]
+        assert [x["id"] for x in listed] == [report_id] and listed[0]["error"] == "no #/page/<id>"
+        meta = c.get(f"/reports/{report_id}").json()
+        assert meta["kind"] == "bundle" and meta["status"] == 400 and meta["htmlBytes"] > 0 and "html" not in meta
+        page = c.get(f"/reports/{report_id}/html")
+        assert page.text.startswith("<html>") and page.headers["content-type"].startswith("text/plain")  # never rendered
+        assert c.get(f"/reports/{report_id}/body").text.endswith("/cloud-training/x")
+        assert c.get("/reports/20260101-000000-abcd").status_code == 404
+        assert c.get("/reports/..%2F..%2Fetc/html").status_code == 404
+        assert c.get(f"/reports/{report_id}/other").status_code == 404
+        assert c.post("/reports", content=b"not json").status_code == 400
+
+
+def test_reports_keep_only_the_newest(tmp_path, monkeypatch):
+    from mathesis import reports
+    monkeypatch.setattr(reports, "MAX_REPORTS", 3)
+    store = reports.ReportStore(tmp_path)
+    made = []
+    for i in range(5):
+        monkeypatch.setattr(reports.secrets, "token_hex", lambda n, i=i: f"{i:04x}")
+        made.append(store.create({"error": str(i)}))
+    assert store.ids() == sorted(set(made), reverse=True)[:3]

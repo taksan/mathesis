@@ -5,8 +5,11 @@ POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body:
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "obsidian_uri": str | null}
               (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist)
+POST /reports  JSON {url, title, kind, path, status, error, html, body, ...} -> {"id"}: an error report the userscript uploads when a save fails
+GET  /reports  list of reports (newest first); /reports/<id> one report's details; /reports/<id>/html the page; /reports/<id>/body what was sent
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
 """
+import json
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,6 +25,7 @@ from .config import Settings
 from .notify import notify
 from .ollama import OllamaClient
 from .obsidian import uri_for
+from .reports import ReportStore
 from .pipeline import summary_path, write_summary
 from .userscripts import list_scripts, render_page
 
@@ -67,6 +71,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.root not in target.parents:
             raise ApiError(403, "path escapes the Mathesis root")
         return target
+
+    reports = ReportStore(settings.report_dir)
+
+    @app.post("/reports")
+    async def create_report(request: Request):
+        try:
+            data = json.loads((await request.body()).decode("utf-8", "replace"))
+        except ValueError:
+            raise ApiError(400, "the report must be JSON")
+        if not isinstance(data, dict):
+            raise ApiError(400, "the report must be a JSON object")
+        report_id = await run_in_threadpool(reports.create, data)
+        print(f"error report {report_id}: {data.get('kind')} {data.get('path')} -> {data.get('error')}")
+        return {"id": report_id}
+
+    @app.get("/reports")
+    def list_reports():
+        return {"reports": reports.list()}
+
+    @app.get("/reports/{report_id}")
+    def get_report(report_id: str):
+        meta = reports.get(report_id)
+        if meta is None:
+            raise ApiError(404, f"no report {report_id}")
+        return meta
+
+    @app.get("/reports/{report_id}/{which}")
+    def get_report_file(report_id: str, which: str):
+        text = reports.text(report_id, which)
+        if text is None:
+            raise ApiError(404, f"no {which} for report {report_id}")
+        return Response(text, media_type="text/plain; charset=utf-8")  # plain text: a saved page is never rendered
 
     @app.get("/userscript", response_class=HTMLResponse)
     def userscripts(request: Request):

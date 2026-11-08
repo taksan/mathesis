@@ -35,6 +35,15 @@ If a page has no recognisable content (no transcript, quiz or lab text), the but
 
 When a lesson is already saved, a second purple button **Open in Obsidian** appears under the main one. It asks the server for the link at click time (the summary if it exists, else the lesson file), so the userscript never holds a local path; this needs the `obsidian://` handler registered on your system.
 
+When a save fails, the userscript also uploads an **error report** (`POST /reports`): the page HTML, the URL, what was sent, the server's error and the script version. The alert shows the report ID. Reports are kept in a temporary folder (`MATHESIS_REPORT_DIR`, default `<tmp>/mathesis-reports`, newest 50) and can be inspected through the API:
+
+```
+GET /reports                 list, newest first
+GET /reports/<id>            details (kind, path, status, error, url, sizes)
+GET /reports/<id>/html       the page as it was (served as plain text, never rendered)
+GET /reports/<id>/body       what the script sent (the lesson URL for bundles, the text otherwise)
+```
+
 Press **Shift twice** quickly on a page to hide or show the button (remembered per site).
 
 ## Installing the userscripts from the server
@@ -68,6 +77,7 @@ Environment variables (command-line flags override them):
 | `MATHESIS_MAX_REVISIONS` | `2` | completeness revision rounds |
 | `MATHESIS_HOST` / `MATHESIS_PORT` | `127.0.0.1` / `5000` | server address |
 | `MATHESIS_SUMMARIZE` / `MATHESIS_NOTIFY` / `MATHESIS_NOTIFY_ON_SAVE` | on / on / off | summaries, desktop notifications |
+| `MATHESIS_REPORT_DIR` | `<tmp>/mathesis-reports` | where error reports are kept |
 | `MATHESIS_OBSIDIAN_OPEN` | on | clicking the "Summary ready" notification opens the summary in Obsidian |
 | `MATHESIS_OBSIDIAN` | auto-detected | command that hands an `obsidian://` URI to Obsidian, e.g. the path of the Obsidian AppImage |
 

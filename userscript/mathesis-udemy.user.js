@@ -323,6 +323,24 @@
       });
   }
 
+  // A failed save uploads the page and the failure to the server (POST /reports) and returns the report ID, or null
+  // when even that is not possible (server unreachable). The ID lets the problem be inspected later with GET /reports/<id>.
+  function reportFailure(info) {
+    let version = null;
+    try { version = GM_info.script.version; } catch (e) { /* not exposed with @grant none */ }
+    return fetch(SERVER + '/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        ...info, site: location.hostname, url: location.href, title: document.title, scriptVersion: version,
+        userAgent: navigator.userAgent, html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => (d && d.id) || null)
+      .catch(() => null);
+  }
+
   button.addEventListener('click', async () => {
     let kind = isQuizReview() ? 'quiz-review' : 'transcript';
     let text = await getTranscript();
@@ -352,7 +370,7 @@
     })
       .then((response) => {
         if (!response.ok) { // show the server's reason (it answers {"error": "..."})
-          return response.json().catch(() => ({})).then((d) => { throw new Error(d.error || response.status + ' ' + response.statusText); });
+          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status }); });
         }
         return response.json();
       })
@@ -362,9 +380,10 @@
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz-review' ? 'Incorrect questions saved!' : 'Transcript sent successfully!');
       })
-      .catch((error) => {
+      .catch(async (error) => {
         console.error('Error:', error);
-        alert('Could not send: ' + error);
+        const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
+        alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
   });
 

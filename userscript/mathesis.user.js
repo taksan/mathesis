@@ -241,6 +241,24 @@
       });
   }
 
+  // A failed save uploads the page and the failure to the server (POST /reports) and returns the report ID, or null
+  // when even that is not possible (server unreachable). The ID lets the problem be inspected later with GET /reports/<id>.
+  function reportFailure(info) {
+    let version = null;
+    try { version = GM_info.script.version; } catch (e) { /* not exposed with @grant none */ }
+    return fetch('http://127.0.0.1:5000' + '/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        ...info, site: location.hostname, url: location.href, title: document.title, scriptVersion: version,
+        userAgent: navigator.userAgent, html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => (d && d.id) || null)
+      .catch(() => null);
+  }
+
   button.addEventListener('click', () => {
     let kind = isQuiz() ? 'quiz' : isBundle() ? 'bundle' : 'transcript';
     let text = getTranscript();
@@ -274,7 +292,7 @@
     })
       .then((response) => {
         if (!response.ok) { // show the server's reason (it answers {"error": "..."})
-          return response.json().catch(() => ({})).then((d) => { throw new Error(d.error || response.status + ' ' + response.statusText); });
+          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status }); });
         }
         return response.json();
       })
@@ -286,9 +304,10 @@
           : kind === 'bundle' ? 'Lesson converted and saved!'
           : 'Transcript sent successfully!');
       })
-      .catch((error) => {
+      .catch(async (error) => {
         console.error('Error:', error);
-        alert('Could not send: ' + error);
+        const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
+        alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
   });
 
