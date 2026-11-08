@@ -252,7 +252,7 @@
   const style = document.createElement('style');
   style.textContent = `
     #copy-transcript-btn {
-      position: fixed; top: 64px; right: 56px; z-index: 1000;
+      position: fixed; top: 64px; right: 56px; z-index: 2147483647;
       padding: 10px 15px; background-color: #ff0000; color: white;
       border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
     }
@@ -260,7 +260,7 @@
     #copy-transcript-btn.saved { background-color: #1e8e3e; }
     #copy-transcript-btn.unknown { background-color: #5f6368; }
     #open-obsidian-btn {
-      position: fixed; top: 108px; right: 56px; z-index: 1000;
+      position: fixed; top: 108px; right: 56px; z-index: 2147483647;
       padding: 10px 15px; background-color: #7c3aed; color: white;
       border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
     }
@@ -424,5 +424,8 @@
       setButtonState('new');
     }
     if (lastChecked === null) refreshStatus();
+    const root = document.body || document.documentElement; // the site may replace <body>: put the buttons back
+    if (!button.isConnected) root.appendChild(button);
+    if (!openButton.isConnected) root.appendChild(openButton);
   }, 1000);
 })();

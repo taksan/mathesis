@@ -160,7 +160,7 @@
       /* header is 64px tall with the profile avatar at its right edge; sit just below it */
       top: 72px;
       right: 10px;
-      z-index: 1000;
+      z-index: 2147483647;
       padding: 10px 15px;
       background-color: #ff0000;
       color: white;
@@ -173,7 +173,7 @@
     #copy-transcript-btn.saved { background-color: #1e8e3e; }
     #copy-transcript-btn.unknown { background-color: #5f6368; }
     #open-obsidian-btn {
-      position: fixed; top: 116px; right: 10px; z-index: 1000;
+      position: fixed; top: 116px; right: 10px; z-index: 2147483647;
       padding: 10px 15px; background-color: #7c3aed; color: white;
       border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
     }
@@ -210,7 +210,9 @@
       .catch((error) => alert('Could not reach the Mathesis server: ' + error));
   });
 
+  let current = { state: 'new', summaryDone: false };
   function setButtonState(state, summaryDone) {
+    current = { state, summaryDone };
     lessonSaved = state === 'saved';
     syncOpenButton();
     button.classList.toggle('saved', state === 'saved');
@@ -348,5 +350,11 @@
       setButtonState('new');
     }
     if (lastChecked === null) refreshStatus();
+    // The site may replace <body> (the buttons vanish) and the lesson iframe appears after the page loads (the label changes)
+    const root = document.body || document.documentElement;
+    if (!button.isConnected) root.appendChild(button);
+    if (!openButton.isConnected) root.appendChild(openButton);
+    const label = LABEL();
+    if (current.state === 'new' && button.textContent !== label) setButtonState('new');
   }, 1000);
 })();
