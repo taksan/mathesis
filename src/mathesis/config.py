@@ -30,6 +30,10 @@ class Settings:
     notify_on_save: bool = False           # also notify when the raw transcript is saved
     pipeline: str = "two-stage"            # "two-stage" or "single"
     max_revisions: int = 2
+    lab_guide: bool = True                 # labs also get <lesson>-lab-guide.md (gcloud / terraform), written by Claude Code
+    claude_command: str = "claude"          # the Claude Code CLI, run headless (claude -p) for the lab guide
+    claude_model: str | None = None        # --model for it (unset: Claude Code's default)
+    claude_timeout: int = 900              # seconds
     obsidian_open: bool = True             # "Summary ready" notification opens the summary in Obsidian when clicked
     obsidian_command: str | None = None    # command that hands an obsidian:// URI to Obsidian (auto-detected if unset)
 
@@ -51,6 +55,10 @@ class Settings:
             notify_on_save=_flag("MATHESIS_NOTIFY_ON_SAVE", False),
             pipeline=e("MATHESIS_PIPELINE", cls.pipeline),
             max_revisions=int(e("MATHESIS_MAX_REVISIONS", cls.max_revisions)),
+            lab_guide=_flag("MATHESIS_LAB_GUIDE", True),
+            claude_command=e("MATHESIS_CLAUDE", cls.claude_command),
+            claude_model=e("MATHESIS_CLAUDE_MODEL") or None,
+            claude_timeout=int(e("MATHESIS_CLAUDE_TIMEOUT", cls.claude_timeout)),
             obsidian_open=_flag("MATHESIS_OBSIDIAN_OPEN", True),
             obsidian_command=e("MATHESIS_OBSIDIAN") or None,
         )

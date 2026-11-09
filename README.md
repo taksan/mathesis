@@ -33,6 +33,8 @@ Some Google Skills lessons are **documents** whose text is not in the page at al
 
 If a page has no recognisable content (no transcript, quiz or lab text), the button saves the **whole page HTML** instead: `X-Mathesis-Kind: raw`, file `<course>/<NN-lesson>.raw.html` next to the lessons (or `_raw/<url words>.raw.html` when the page title can't be read). Raw pages are never summarized; they are kept so the page can be analysed and the script taught about it.
 
+On a **lab** page the button reads "Copy Lab" (`X-Mathesis-Kind: lab`). The lab instructions are saved and summarized like a transcript, and **Claude Code** (the `claude` CLI, run headless with `claude -p`, no tools, empty temporary folder, so it can only turn text into text) also writes `<lab>-lab-guide.md` next to it: the resources the lab creates, a setup block (variables, APIs), `gcloud` commands per lab task, Terraform only for what gcloud cannot create, verification commands and clean-up. Commands it is unsure about carry a `# VERIFY:` comment; read them before running anything. It takes about a minute and runs in parallel with the summary; a notification ("Lab guide ready") opens the guide in Obsidian. `--no-lab-guide` / `MATHESIS_LAB_GUIDE=0` turns it off, `MATHESIS_CLAUDE_MODEL` picks the model, `MATHESIS_CLAUDE` the CLI path; the prompt is `src/mathesis/prompts/lab_guide.txt`. This uses your Claude Code login (usage counts against it).
+
 When a lesson is already saved, a second purple button **Open in Obsidian** appears under the main one. It asks the server for the link at click time (the summary if it exists, else the lesson file), so the userscript never holds a local path; this needs the `obsidian://` handler registered on your system.
 
 When a save fails, the userscript also uploads an **error report** (`POST /reports`): the page HTML, the URL, what was sent, the server's error and the script version. The alert shows the report ID. Reports are kept in a temporary folder (`MATHESIS_REPORT_DIR`, default `<tmp>/mathesis-reports`, newest 50) and can be inspected through the API:
@@ -78,6 +80,7 @@ Environment variables (command-line flags override them):
 | `MATHESIS_HOST` / `MATHESIS_PORT` | `127.0.0.1` / `5000` | server address |
 | `MATHESIS_SUMMARIZE` / `MATHESIS_NOTIFY` / `MATHESIS_NOTIFY_ON_SAVE` | on / on / off | summaries, desktop notifications |
 | `MATHESIS_REPORT_DIR` | `<tmp>/mathesis-reports` | where error reports are kept |
+| `MATHESIS_LAB_GUIDE` / `MATHESIS_CLAUDE` / `MATHESIS_CLAUDE_MODEL` / `MATHESIS_CLAUDE_TIMEOUT` | on / `claude` / Claude Code's default / `900` | lab guides written by Claude Code |
 | `MATHESIS_OBSIDIAN_OPEN` | on | clicking the "Summary ready" notification opens the summary in Obsidian |
 | `MATHESIS_OBSIDIAN` | auto-detected | command that hands an `obsidian://` URI to Obsidian, e.g. the path of the Obsidian AppImage |
 

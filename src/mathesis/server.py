@@ -2,7 +2,7 @@
 
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
-              fetches the lesson, converts it to Markdown, saves it and summarizes it); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
+              fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "obsidian_uri": str | null}
               (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist)
 POST /reports  JSON {url, title, kind, path, status, error, html, body, ...} -> {"id"}: an error report the userscript uploads when a save fails
@@ -11,6 +11,7 @@ GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @up
 """
 import json
 import re
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import unquote
@@ -22,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import bundle
 from .config import Settings
+from .labguide import write_lab_guide
 from .notify import notify
 from .ollama import OllamaClient
 from .obsidian import uri_for
@@ -154,8 +156,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print(f"saved {kind} {len(content)} bytes -> {target}")
         if settings.notify_on_save:
             notify("Transcript saved", target.stem, enabled=settings.notify)
-        if settings.summarize and content.strip() and kind in ("transcript", "bundle"):
+        if settings.summarize and content.strip() and kind in ("transcript", "bundle", "lab"):
             background.add_task(write_summary, content.decode("utf-8", "replace"), str(target), settings)
+        if settings.lab_guide and content.strip() and kind == "lab":  # own thread: the summary may take minutes
+            threading.Thread(target=write_lab_guide, args=(content.decode("utf-8", "replace"), str(target), settings),
+                             daemon=True).start()
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind}
 
     return app

@@ -29,6 +29,8 @@ def _settings(args) -> Settings:
         overrides["max_revisions"] = 0
     if getattr(args, "no_summary", False):
         overrides["summarize"] = False
+    if getattr(args, "no_lab_guide", False):
+        overrides["lab_guide"] = False
     if getattr(args, "no_open", False):
         overrides["obsidian_open"] = False
     if getattr(args, "no_notify", False):
@@ -45,7 +47,7 @@ def cmd_serve(args) -> int:
         "MATHESIS_HOST": s.host, "MATHESIS_PORT": str(s.port), "MATHESIS_ROOT": str(s.root),
         "MATHESIS_MODEL": s.model, "MATHESIS_OLLAMA_URL": s.ollama_url, "MATHESIS_NUM_CTX": str(s.num_ctx),
         "MATHESIS_SUMMARIZE": "1" if s.summarize else "0", "MATHESIS_NOTIFY": "1" if s.notify else "0",
-        "MATHESIS_NOTIFY_ON_SAVE": "1" if s.notify_on_save else "0", "MATHESIS_PIPELINE": s.pipeline,
+        "MATHESIS_LAB_GUIDE": "1" if s.lab_guide else "0", "MATHESIS_NOTIFY_ON_SAVE": "1" if s.notify_on_save else "0", "MATHESIS_PIPELINE": s.pipeline,
         "MATHESIS_MAX_REVISIONS": str(s.max_revisions), "MATHESIS_OBSIDIAN_OPEN": "1" if s.obsidian_open else "0",
         **({"MATHESIS_OBSIDIAN": s.obsidian_command} if s.obsidian_command else {}),
     })
@@ -60,12 +62,12 @@ def _transcripts(paths) -> list[Path]:
     found = []
     for p in map(Path, paths):
         if p.is_dir():
-            found += sorted(f for f in p.rglob("*.md") if not f.name.endswith("-summary.md"))
+            found += sorted(f for f in p.rglob("*.md") if not f.name.endswith(("-summary.md", "-lab-guide.md")))
         elif p.is_file():
             found.append(p)
         else:
             print(f"not found: {p}", file=sys.stderr)
-    return [f for f in found if not f.name.endswith("-summary.md")]
+    return [f for f in found if not f.name.endswith(("-summary.md", "-lab-guide.md"))]
 
 
 def cmd_summarize(args) -> int:
@@ -120,6 +122,11 @@ def cmd_doctor(args) -> int:
     report(not missing, f"prompts in {PROMPT_DIR}" + (f" (missing: {', '.join(missing)})" if missing else ""))
     report(True if shutil.which("notify-send") else None,
            "notify-send " + ("found" if shutil.which("notify-send") else "not found: no desktop notifications"))
+    claude = shutil.which(s.claude_command)
+    report(True if claude else None, f"Claude Code CLI ({s.claude_command}) for lab guides: " + (claude if claude else
+           "not found (labs get no gcloud/terraform guide; set MATHESIS_CLAUDE)") + ("" if s.lab_guide else " [lab guides are off]"))
+    missing_lab = (PROMPT_DIR / "lab_guide.txt").is_file()
+    report(missing_lab, "lab guide prompt " + ("found" if missing_lab else "missing"))
     opener = find_command(s.obsidian_command)
     report(True if opener else None, "Obsidian opener: " + (" ".join(opener) if opener else
            "not found (notification click will not open Obsidian; set MATHESIS_OBSIDIAN)"))
@@ -172,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--host"), sv.add_argument("--port", type=int)
     sv.add_argument("--no-reload", action="store_true", help="disable hot reload")
     sv.add_argument("--no-summary", action="store_true", help="only save transcripts, no Ollama summaries")
+    sv.add_argument("--no-lab-guide", dest="no_lab_guide", action="store_true", help="labs: no Claude Code gcloud/terraform guide")
     sv.add_argument("--no-notify", action="store_true", help="no desktop notifications")
     sv.add_argument("--no-open", dest="no_open", action="store_true", help="notification click does not open Obsidian")
     sv.add_argument("--single", action="store_true", help="one-call pipeline with the original prompt")

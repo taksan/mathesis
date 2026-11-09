@@ -87,6 +87,8 @@
   // A quiz page keeps its data in JSON attributes of <ql-quiz>: quizversion (questions and options, no answers)
   // and quizresponse (the learner's selections, choiceId per question once answered).
   const isQuiz = () => !!document.querySelector('ql-quiz');
+  // A lab page (no video, lab instructions in the page): saved like a transcript, plus a gcloud/terraform guide made by the server
+  const isLab = () => !isQuiz() && !isBundle() && !document.querySelector('ql-youtube-video') && !!document.querySelector('.lab-content-container');
 
   // "HTML bundle" lessons (documents) live in an iframe on another origin, so the page itself holds no text:
   // the server reads the lesson from the bundle URL, converts it to Markdown and summarizes it.
@@ -183,7 +185,7 @@
 
   const button = document.createElement('button');
   button.id = 'copy-transcript-btn';
-  const LABEL = () => (isQuiz() ? 'Copy Quiz' : isBundle() ? 'Copy Lesson' : 'Copy Transcript');
+  const LABEL = () => (isQuiz() ? 'Copy Quiz' : isBundle() ? 'Copy Lesson' : isLab() ? 'Copy Lab' : 'Copy Transcript');
   button.textContent = LABEL();
 
   // Show whether this lesson was already saved (green) or not (red); grey = server unreachable.
@@ -262,7 +264,7 @@
   }
 
   button.addEventListener('click', () => {
-    let kind = isQuiz() ? 'quiz' : isBundle() ? 'bundle' : 'transcript';
+    let kind = isQuiz() ? 'quiz' : isBundle() ? 'bundle' : isLab() ? 'lab' : 'transcript';
     let text = getTranscript();
     let filePath;
     if (text === RAW) {
@@ -304,6 +306,7 @@
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz' ? 'Quiz saved!'
           : kind === 'bundle' ? 'Lesson converted and saved!'
+          : kind === 'lab' ? 'Lab saved! The summary and the gcloud/terraform guide are being written.'
           : 'Transcript sent successfully!');
       })
       .catch(async (error) => {
