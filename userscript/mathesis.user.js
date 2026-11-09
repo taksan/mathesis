@@ -152,7 +152,43 @@
       return RAW;
     }
     const labInstructions = document.querySelector('.lab-content-container');
-    return labInstructions ? labInstructions.innerText : RAW;
+    return labInstructions ? labText(labInstructions) : RAW;
+  }
+
+  // innerText skips <ql-code-block> (commands, scripts, sample output) and <ql-variable> (Region, Zone ...): their text sits
+  // where the page renders it from. So the text is read from a copy in which each is replaced by plain text.
+  function labText(root) {
+    const dedent = (code) => {
+      const lines = code.replace(/\t/g, '  ').split('\n');
+      while (lines.length && !lines[0].trim()) lines.shift();
+      while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+      const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length), Infinity);
+      return lines.map((l) => l.slice(Number.isFinite(indent) ? indent : 0).replace(/\s+$/, '')).join('\n');
+    };
+    const copy = root.cloneNode(true);
+    copy.querySelectorAll('ql-code-block').forEach((block) => {
+      let code = dedent(block.textContent || '');
+      // {{{key | "Label"}}} is a lab value filled in by the page; the lab account's credentials are never copied
+      // sample output ("Example output") only carries per-lab account/project ids: left out
+      if (block.hasAttribute('output') || /\{\{\{\s*user_\d+\./.test(code) || !code) { block.remove(); return; }
+      code = code.replace(/\{\{\{[^}|]*\|\s*"([^"]+)"\s*\}\}\}/g, '<$1>');
+      const language = (block.getAttribute('language') || '').toLowerCase();
+      const fence = '```' + (language && language !== 'cpp' && language !== 'plaintext' ? language : '') + '\n';
+      const pre = document.createElement('pre');
+      pre.textContent = fence + code + '\n```';
+      block.replaceWith(pre);
+    });
+    copy.querySelectorAll('ql-variable').forEach((v) => {
+      v.replaceWith(document.createTextNode(v.getAttribute('placeholder') || '<' + (v.getAttribute('key') || 'value') + '>'));
+    });
+    // innerText needs a rendered element; keep the copy off-screen and short-lived
+    copy.style.cssText = 'position:fixed;left:-99999px;top:0;width:900px;pointer-events:none;';
+    document.body.appendChild(copy);
+    try {
+      return copy.innerText.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+    } finally {
+      copy.remove();
+    }
   }
 
   const style = document.createElement('style');

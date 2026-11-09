@@ -25,6 +25,8 @@ Only if some resource has no gcloud command. For each one, first say in one sent
 Commands that delete what the lab created, in reverse dependency order.
 
 Rules:
+- The lab text may contain placeholders in angle brackets such as <REGION> or <ZONE>: they are values the learner reads from the lab panel. Keep them as shell variables in the Setup block; do not guess a value for them.
+- Commands the lab gives (in code blocks) are the source of truth: use them verbatim, adding only the variables they need. Do not replace them with your own version. Only when the lab text announces a command or script but no code follows it, say so in a `# VERIFY:` comment and give your best reconstruction.
 - Skip everything that is not creating or configuring a resource: console navigation, "click ..." instructions, sign-in with the lab's temporary credentials, Cloud Shell activation, score checking ("Check my progress"), explanations and theory.
 - When the lab does a step in the console that has a gcloud equivalent, write the equivalent command. When it runs commands already, keep them (fixing quoting or variables) instead of rewriting them.
 - Never invent flags, command groups or resource properties. Use gcloud command groups you are sure exist; use `gcloud beta` or `gcloud alpha` only when needed and say so in a comment. When you are not certain a command or flag is right, keep the best attempt and put a comment `# VERIFY: <what to check>` above it.
