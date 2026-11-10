@@ -199,8 +199,8 @@
     };
   }
 
-  function formatQuestion(q) {
-    const lines = [`## Question ${q.number}`, ''];
+  function formatQuestion(q, unmarked = false) {
+    const lines = [`## Question ${q.number}${unmarked ? '*' : ''}`, ''];
     if (q.domain) lines.push(`*Domain: ${q.domain}*`, '');
     lines.push(q.stem, '');
     for (const a of q.answers) {
@@ -222,29 +222,32 @@
     return '';
   }
 
-  // "# Incorrect": the wrong answers. "# To Review": questions marked ("not sure") that were answered correctly.
-  // Both come from the page's filter pills ("incorrect" and "marked"); the pill that was selected is restored afterwards.
+  // "# Incorrect": the wrong answers; "Question N*" = wrong and NOT marked (you were sure: a clear misconception).
+  // "# To Review": questions marked ("not sure") that were answered correctly.
+  // Both come from the page's filter pills ("marked" and "incorrect"); the pill that was selected is restored afterwards.
   async function getReview() {
     const all = pills();
     const incorrect = all.find((p) => p.name === 'incorrect');
     const marked = all.find((p) => p.name === 'marked');
     const previous = all.find((p) => p.input.checked);
-    const format = (labels) => labels.map((l) => formatQuestion(parseQuestion(paneOf(l))));
-    let wrong, toReview = [], markedCount = 0, warning = '';
+    const number = (l) => (paneOf(l).textContent.match(/Question\s*(\d+)/) || [])[1];
+    const format = (labels, unmarked) => labels.map((l) => formatQuestion(parseQuestion(paneOf(l)), unmarked && unmarked.has(number(l))));
+    const markedNumbers = new Set();
+    let wrong, toReview = [], markedCount = 0, unmarkedCount = 0, warning = '';
     try {
-      if (incorrect && incorrect.count) {
-        if (!(await selectPill(incorrect))) warning += `Could not show exactly the ${incorrect.count} incorrect questions; saved what is on the page. `;
-        wrong = format(statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim())));
-      } else if (!incorrect) { // no pills on this page: whatever is shown
-        wrong = format(statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim())));
-      } else {
-        wrong = [];
-      }
-      if (marked && marked.count) {
+      if (marked && marked.count) { // first: which questions are marked, and the correct ones among them
         markedCount = marked.count;
         if (!(await selectPill(marked))) warning += `Could not show exactly the ${marked.count} marked questions; saved what is on the page. `;
+        statusLabels().forEach((l) => markedNumbers.add(number(l)));
         toReview = format(statusLabels().filter((l) => /^correct$/i.test(l.textContent.trim())));
       }
+      const wrongLabels = () => statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim()));
+      if (incorrect && incorrect.count) {
+        if (!(await selectPill(incorrect))) warning += `Could not show exactly the ${incorrect.count} incorrect questions; saved what is on the page. `;
+      }
+      const unmarked = new Set(wrongLabels().map(number).filter((n) => !markedNumbers.has(n)));
+      unmarkedCount = unmarked.size;
+      wrong = incorrect && !incorrect.count ? [] : format(wrongLabels(), unmarked);
     } finally {
       if (previous && !previous.input.checked) previous.label.click();
     }
@@ -252,11 +255,12 @@
     if (warning) alert(warning.trim());
     const total = (all.find((p) => p.name === 'all') || {}).count;
     const attempt = attemptLabel();
-    const section = (title, facts, questions) => [`# ${title}`, '', `*${[attempt, facts].filter(Boolean).join(' · ')}*`, '',
+    const section = (title, facts, questions) => [`# ${title}`, '', `*${[attempt, ...facts].filter(Boolean).join(' · ')}*`, '',
       questions.length ? questions.join('\n\n') : '*None*'].join('\n');
     return [
-      section('Incorrect', `${wrong.length} incorrect${total ? ` of ${total}` : ''} questions`, wrong),
-      section('To Review', `${toReview.length} marked and answered correctly (${markedCount} marked in total)`, toReview),
+      section('Incorrect', [`${wrong.length} incorrect${total ? ` of ${total}` : ''} questions`,
+        `${unmarkedCount} not marked (*): wrong although you felt sure`], wrong),
+      section('To Review', [`${toReview.length} marked and answered correctly (${markedCount} marked in total)`], toReview),
     ].join('\n\n') + '\n';
   }
 
