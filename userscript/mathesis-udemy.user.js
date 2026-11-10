@@ -4,7 +4,7 @@
 // @version      30.5f261d6
 // @updateURL    http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
 // @downloadURL  http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
-// @description  Adds a button that saves a Udemy lesson transcript, or the incorrect questions of a quiz result, to the local Mathesis server (mathesis serve)
+// @description  Adds a button that saves a Udemy lesson transcript, or the incorrect and marked-for-review questions of a quiz result, to the local Mathesis server (mathesis serve)
 // @match        https://www.udemy.com/course/*
 // @grant        none
 // ==/UserScript==
@@ -163,25 +163,14 @@
     }).filter(Boolean);
   }
 
-  // The page only renders the questions of the selected pill, so select "incorrect", wait, and restore it afterwards.
-  async function withIncorrectPill(fn) {
-    const all = pills();
-    const incorrect = all.find((p) => p.name === 'incorrect');
-    if (!incorrect) return fn(null);
-    if (!incorrect.count) { alert('No incorrect questions in this attempt'); return null; }
-    const previous = all.find((p) => p.input.checked);
-    const switching = previous !== incorrect;
-    if (switching) incorrect.label.click();
+  // The page only renders the questions of the selected pill: select it and wait until exactly its questions are shown.
+  async function selectPill(pill) {
+    if (!pill.input.checked) pill.label.click();
     for (let i = 0; i < 30; i++) { // up to ~4.5s for React to re-render
-      const labels = statusLabels();
-      if (labels.length === incorrect.count && labels.every((l) => /incorrect/i.test(l.textContent))) break;
+      if (pill.input.checked && statusLabels().length === pill.count) return true;
       await sleep(150);
     }
-    try {
-      return fn(incorrect.count);
-    } finally {
-      if (switching && previous) previous.label.click();
-    }
+    return false;
   }
 
   // Smallest ancestor of a status label that contains only that question.
@@ -233,18 +222,42 @@
     return '';
   }
 
+  // "# Incorrect": the wrong answers. "# To Review": questions marked ("not sure") that were answered correctly.
+  // Both come from the page's filter pills ("incorrect" and "marked"); the pill that was selected is restored afterwards.
   async function getReview() {
-    return withIncorrectPill((expected) => {
-      const wrong = statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim()));
-      if (!wrong.length) { alert('No incorrect questions found'); return null; }
-      if (expected != null && wrong.length !== expected) {
-        alert(`Expected ${expected} incorrect questions but found ${wrong.length}; saving what is on the page.`);
+    const all = pills();
+    const incorrect = all.find((p) => p.name === 'incorrect');
+    const marked = all.find((p) => p.name === 'marked');
+    const previous = all.find((p) => p.input.checked);
+    const format = (labels) => labels.map((l) => formatQuestion(parseQuestion(paneOf(l))));
+    let wrong, toReview = [], markedCount = 0, warning = '';
+    try {
+      if (incorrect && incorrect.count) {
+        if (!(await selectPill(incorrect))) warning += `Could not show exactly the ${incorrect.count} incorrect questions; saved what is on the page. `;
+        wrong = format(statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim())));
+      } else if (!incorrect) { // no pills on this page: whatever is shown
+        wrong = format(statusLabels().filter((l) => /^incorrect$/i.test(l.textContent.trim())));
+      } else {
+        wrong = [];
       }
-      const total = (pills().find((p) => p.name === 'all') || {}).count;
-      const facts = [attemptLabel(), `${wrong.length} incorrect${total ? ` of ${total}` : ''} questions`].filter(Boolean);
-      const questions = wrong.map((l) => formatQuestion(parseQuestion(paneOf(l))));
-      return [`# ${lessonFileName().title} - incorrect questions`, '', `*${facts.join(' · ')}*`, '', questions.join('\n\n')].join('\n') + '\n';
-    });
+      if (marked && marked.count) {
+        markedCount = marked.count;
+        if (!(await selectPill(marked))) warning += `Could not show exactly the ${marked.count} marked questions; saved what is on the page. `;
+        toReview = format(statusLabels().filter((l) => /^correct$/i.test(l.textContent.trim())));
+      }
+    } finally {
+      if (previous && !previous.input.checked) previous.label.click();
+    }
+    if (!wrong.length && !toReview.length) { alert('No incorrect or marked-and-correct questions in this attempt'); return null; }
+    if (warning) alert(warning.trim());
+    const total = (all.find((p) => p.name === 'all') || {}).count;
+    const attempt = attemptLabel();
+    const section = (title, facts, questions) => [`# ${title}`, '', `*${[attempt, facts].filter(Boolean).join(' · ')}*`, '',
+      questions.length ? questions.join('\n\n') : '*None*'].join('\n');
+    return [
+      section('Incorrect', `${wrong.length} incorrect${total ? ` of ${total}` : ''} questions`, wrong),
+      section('To Review', `${toReview.length} marked and answered correctly (${markedCount} marked in total)`, toReview),
+    ].join('\n\n') + '\n';
   }
 
   // ---- button ----
@@ -270,7 +283,7 @@
 
   const button = document.createElement('button');
   button.id = 'copy-transcript-btn';
-  const LABEL = () => (isQuizReview() ? 'Copy Incorrect Questions' : 'Copy Transcript');
+  const LABEL = () => (isQuizReview() ? 'Copy Incorrect + To Review' : 'Copy Transcript');
   button.textContent = LABEL();
 
 
@@ -378,7 +391,7 @@
         console.log('[Mathesis] saved', data);
         if (kind !== 'raw') setButtonState('saved', false);
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
-          : kind === 'quiz-review' ? 'Incorrect questions saved!' : 'Transcript sent successfully!');
+          : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!' : 'Transcript sent successfully!');
       })
       .catch(async (error) => {
         console.error('Error:', error);

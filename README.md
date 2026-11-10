@@ -60,7 +60,7 @@ With `mathesis serve` running, install each script with **Install from URL** (Ta
 ## Udemy
 
 `userscript/mathesis-udemy.user.js` saves Udemy lectures to `Udemy/<course>/<NN>-<lecture>.md` through the same server (summaries included).
-On a **quiz results** page the button reads "Copy Incorrect Questions": it selects the "incorrect" pill (and restores your pill afterwards), and saves only the wrong questions as `NN-<quiz title> - incorrect.md` with `X-Mathesis-Kind: quiz-review` (no summary). Each question has its domain, the options (your answer ❌, correct answer ✅) and Udemy's explanations; the explanations of the options you did not pick are in a folded callout.
+On a **quiz results** page the button reads "Copy Incorrect + To Review": it reads the "incorrect" pill, then the "marked" pill (and restores your pill afterwards), and saves one file, `NN-<quiz title> - incorrect.md`, with `X-Mathesis-Kind: quiz-review` (no summary). It has two `#` sections: **Incorrect** (the questions you got wrong) and **To Review** (questions you marked because you were not sure, but answered correctly; marked questions you got wrong are already under Incorrect). Each question has its domain, the options (your answer ❌, correct answer ✅) and Udemy's explanations; the explanations of the options you did not pick are in a folded callout.
 
 `summarize` skips files that already have a summary (`--force` to overwrite). Useful flags: `--model`, `--single` (one call with the original prompt), `--no-revise`; `serve` also takes `--no-reload`, `--no-summary`, `--no-notify`, `--host`, `--port`, `--root`.
 
