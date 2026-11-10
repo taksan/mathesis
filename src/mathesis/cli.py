@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import Settings
+from .lessons import DERIVED
 from .obsidian import find_command, open_in_obsidian
 from .ollama import OllamaClient
 from .pipeline import PROMPT_DIR, render, summarize, summary_path
@@ -62,12 +63,12 @@ def _transcripts(paths) -> list[Path]:
     found = []
     for p in map(Path, paths):
         if p.is_dir():
-            found += sorted(f for f in p.rglob("*.md") if not f.name.endswith(("-summary.md", "-lab-guide.md")))
+            found += sorted(f for f in p.rglob("*.md") if not f.name.endswith(DERIVED))
         elif p.is_file():
             found.append(p)
         else:
             print(f"not found: {p}", file=sys.stderr)
-    return [f for f in found if not f.name.endswith(("-summary.md", "-lab-guide.md"))]
+    return [f for f in found if not f.name.endswith(DERIVED)]
 
 
 def cmd_summarize(args) -> int:

@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+# files made from a lesson (summary, lab guide, Udemy quiz review and its lessons-to-learn companion), never lessons themselves
+DERIVED = ("-summary.md", "-lab-guide.md", " - incorrect.md", " - lessons to learn.md")
 CACHE = Path("~/.cache/mathesis/embeddings.json").expanduser()
 
 
@@ -22,7 +24,7 @@ def lesson_files(course_dir: Path) -> list[Path]:
     def is_quiz(f: Path) -> bool:
         head = f.read_text(encoding="utf-8")[:400]
         return bool(re.search(r"\*\d+ questions · multiple choice", head))
-    return [f for f in sorted(course_dir.glob("*.md")) if not f.name.endswith(("-summary.md", "-lab-guide.md")) and not is_quiz(f)]
+    return [f for f in sorted(course_dir.glob("*.md")) if not f.name.endswith(DERIVED) and not is_quiz(f)]
 
 
 def passages(text: str, max_chars: int = 900) -> list[str]:
