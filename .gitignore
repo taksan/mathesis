@@ -6,6 +6,9 @@ dist/
 build/
 eval/out/
 
+# local configuration (may hold an API key)
+/config.toml
+
 # saved lesson page: contains account ids and the full course page, keep it local only
 archive/sample.html
 

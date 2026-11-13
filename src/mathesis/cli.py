@@ -209,7 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--model", help="Ollama model (default: MATHESIS_MODEL or gemma4:12b)")
         sp.add_argument("--ollama-url", dest="ollama_url", help="Ollama server URL")
         sp.add_argument("--root", help="folder where notes may be written (default: MATHESIS_ROOT)")
-        sp.add_argument("--config", help="config file (default: MATHESIS_CONFIG or ~/.config/mathesis/config.toml)")
+        sp.add_argument("--config", help="config file (default: MATHESIS_CONFIG or config.toml in the application directory)")
 
     sv = sub.add_parser("serve", help="run the server the userscript talks to (hot reload on code changes)")
     common(sv)

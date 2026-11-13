@@ -1,5 +1,6 @@
-# Mathesis configuration. Copy to ~/.config/mathesis/config.toml (`mathesis config --init` does it) and keep what you
-# change. Every key is optional. Order of precedence: this file < MATHESIS_* environment variables < command-line flags.
+# Mathesis configuration. `mathesis config --init` writes this file as config.toml in the application directory
+# (gitignored: it may hold an API key). Keep what you change.
+# Every key is optional. Precedence: this file < MATHESIS_* environment variables < command-line flags.
 # Restart `mathesis serve` after editing. `mathesis doctor` checks that the chosen backends work.
 #
 # If a backend is unreachable or not configured, lessons and labs are still saved: only the summary / lab guide is

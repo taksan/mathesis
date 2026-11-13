@@ -1,6 +1,6 @@
 """Settings: built-in defaults < config file (TOML) < MATHESIS_* environment variables < command-line flags.
 
-Config file: --config, else $MATHESIS_CONFIG, else ~/.config/mathesis/config.toml (optional).
+Config file: --config, else $MATHESIS_CONFIG, else config.toml in the application directory (the checkout; gitignored, optional).
 `mathesis config --init` writes a commented example (src/mathesis/config.example.toml).
 """
 import os
@@ -13,7 +13,7 @@ from pathlib import Path
 DEFAULT_ROOT = "/home/takeuchi/projects/obsidian-takvault/_study_roadmap"
 DEFAULT_REPORTS = Path(tempfile.gettempdir()) / "mathesis-reports"
 DEFAULT_USERSCRIPTS = Path(__file__).resolve().parents[2] / "userscript"  # the repo folder (source checkout)
-DEFAULT_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mathesis" / "config.toml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config.toml"  # the application directory (source checkout)
 EXAMPLE_CONFIG = Path(__file__).resolve().parent / "config.example.toml"
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai"  # Gemini's OpenAI-compatible endpoint

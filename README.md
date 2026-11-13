@@ -66,7 +66,7 @@ On a **quiz results** page the button reads "Copy Incorrect + To Review": it rea
 
 ## Configuration file
 
-Settings can live in a TOML file: `--config`, else `$MATHESIS_CONFIG`, else `~/.config/mathesis/config.toml`. `mathesis config --init` writes a commented example (`src/mathesis/config.example.toml`); `mathesis config` shows what is in use; `mathesis doctor` tests the backends. Precedence: file < `MATHESIS_*` environment variables < command-line flags. Restart `mathesis serve` after editing; a mistyped key or unknown provider is reported with its name instead of being ignored.
+Settings can live in a TOML file: `--config`, else `$MATHESIS_CONFIG`, else `config.toml` in the application directory (the checkout; it is gitignored, so an API key in it is never committed). `mathesis config --init` writes a commented example there (`src/mathesis/config.example.toml`); `mathesis config` shows what is in use; `mathesis doctor` tests the backends. Precedence: file < `MATHESIS_*` environment variables < command-line flags. Restart `mathesis serve` after editing; a mistyped key or unknown provider is reported with its name instead of being ignored.
 
 Summaries and lab guides each pick a **provider** (and optionally a model), so they can differ:
 
@@ -95,7 +95,7 @@ They override the config file; command-line flags override them.
 | Variable | Default | Meaning |
 |---|---|---|
 | `MATHESIS_ROOT` | the Obsidian `_study_roadmap` folder (holds `Google Skills/` and `Udemy/`) | the only folder the server may write into |
-| `MATHESIS_CONFIG` | `~/.config/mathesis/config.toml` | the config file |
+| `MATHESIS_CONFIG` | `config.toml` in the application directory | the config file |
 | `MATHESIS_SUMMARY_PROVIDER` / `MATHESIS_LAB_PROVIDER` | `ollama` / `claude-code` | provider per job (`none` = off) |
 | `MATHESIS_MODEL` | `gemma4:12b` | Ollama model used for every stage |
 | `MATHESIS_OLLAMA_URL` | `http://172.17.0.1:11434` | Ollama server |
