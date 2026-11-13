@@ -5,7 +5,11 @@ class FakeClient:
     def __init__(self, settings):
         self.model = settings.model
 
-    def check_model(self):
+    @property
+    def label(self):
+        return self.model
+
+    def check(self):
         return True, "ok"
 
     def chat(self, system, user, temperature=0.2):
@@ -21,7 +25,7 @@ def test_transcripts_expands_folders_and_skips_summaries(tmp_path):
 
 
 def test_summarize_writes_summary_and_skips_existing(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "OllamaClient", FakeClient)
+    monkeypatch.setattr(cli, "make_client", lambda s, role: FakeClient(s))
     f = tmp_path / "P" / "C" / "01-L.md"
     f.parent.mkdir(parents=True)
     f.write_text("# L\ntext")
@@ -34,7 +38,7 @@ def test_summarize_writes_summary_and_skips_existing(tmp_path, monkeypatch, caps
 
 
 def test_summarize_stdout_does_not_write(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "OllamaClient", FakeClient)
+    monkeypatch.setattr(cli, "make_client", lambda s, role: FakeClient(s))
     f = tmp_path / "P" / "C" / "01-L.md"
     f.parent.mkdir(parents=True)
     f.write_text("t")

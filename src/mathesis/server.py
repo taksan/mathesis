@@ -25,7 +25,7 @@ from . import bundle
 from .config import Settings
 from .labguide import write_lab_guide
 from .notify import notify
-from .ollama import OllamaClient
+from .llm import make_client
 from .obsidian import uri_for
 from .reports import ReportStore
 from .pipeline import summary_path, write_summary
@@ -43,11 +43,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         print(f"Mathesis listening on http://{settings.host}:{settings.port}  (writing under {settings.root})")
-        if settings.summarize:
-            ok, message = await run_in_threadpool(OllamaClient(settings).check_model)
-            print(("Summary " if ok else "ERROR: ") + message + (f" (pipeline={settings.pipeline})" if ok else ""))
-            if not ok:
-                notify("Mathesis: summaries unavailable", message, error=True, enabled=settings.notify)
+        if settings.config_path:
+            print(f"config: {settings.config_path}")
+        for role, enabled, what in [("summary", settings.summary_enabled, "Summaries"),
+                                    ("lab_guide", settings.lab_guide_enabled, "Lab guides")]:
+            if not enabled:
+                print(f"{what}: off")
+                continue
+            client = make_client(settings, role)
+            ok, message = await run_in_threadpool(client.check)
+            print(f"{what} ({client.label}): " + (message if ok else
+                  f"WARNING: {message}. Lessons are still saved; {what.lower()} are skipped until it is reachable."))
+            if not ok and role == "summary":
+                notify("Mathesis: summaries unavailable", message, enabled=settings.notify)
         yield
 
     app = FastAPI(title="Mathesis", lifespan=lifespan)
@@ -156,9 +164,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print(f"saved {kind} {len(content)} bytes -> {target}")
         if settings.notify_on_save:
             notify("Transcript saved", target.stem, enabled=settings.notify)
-        if settings.summarize and content.strip() and kind in ("transcript", "bundle", "lab"):
+        if settings.summary_enabled and content.strip() and kind in ("transcript", "bundle", "lab"):
             background.add_task(write_summary, content.decode("utf-8", "replace"), str(target), settings)
-        if settings.lab_guide and content.strip() and kind == "lab":  # own thread: the summary may take minutes
+        if settings.lab_guide_enabled and content.strip() and kind == "lab":  # own thread: the summary may take minutes
             threading.Thread(target=write_lab_guide, args=(content.decode("utf-8", "replace"), str(target), settings),
                              daemon=True).start()
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind}

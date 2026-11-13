@@ -1,0 +1,60 @@
+# Mathesis configuration. Copy to ~/.config/mathesis/config.toml (`mathesis config --init` does it) and keep what you
+# change. Every key is optional. Order of precedence: this file < MATHESIS_* environment variables < command-line flags.
+# Restart `mathesis serve` after editing. `mathesis doctor` checks that the chosen backends work.
+#
+# If a backend is unreachable or not configured, lessons and labs are still saved: only the summary / lab guide is
+# skipped (one desktop notification per outage). It is checked again on every save, so starting Ollama later works.
+
+[server]
+# host = "127.0.0.1"
+# port = 5000
+# root = "~/notes/_study_roadmap"       # the only folder the server may write into
+# notify = true
+# notify_on_save = false
+# obsidian_open = true
+
+[summary]
+# enabled = true
+provider = "ollama"                     # ollama | gemini | openai | claude-code | <a [providers.<name>] below> | "none"
+# model = "gemini-2.5-pro"              # overrides the provider's model for summaries only
+# pipeline = "two-stage"                # or "single" (one call; cheaper on an API)
+# max_revisions = 2
+
+[lab_guide]
+# enabled = true
+provider = "claude-code"                # same choices. Try "gemini" if you do not use Claude Code
+# model = "gemini-2.5-pro"              # lab guides profit from a stronger model than summaries
+
+# ---- providers -------------------------------------------------------------------------------------------------
+# Built in: ollama, claude-code, gemini, openai. A table here changes or extends them.
+
+[providers.ollama]
+# url = "http://172.17.0.1:11434"
+# model = "gemma4:12b"
+# num_ctx = 16384                       # Ollama's default (2048) truncates transcripts
+# embed_model = "bge-m3:latest"         # matches quiz questions to lessons; always runs on Ollama
+
+[providers.claude-code]                 # the `claude` CLI, headless, no tools; uses your Claude Code login
+# command = "claude"
+# model = "sonnet"
+# timeout = 900
+
+[providers.gemini]                      # Gemini through its OpenAI-compatible endpoint
+# api_key_env = "GEMINI_API_KEY"        # NAME of the environment variable holding the key (preferred)
+# api_key = "..."                       # or the key itself (then: chmod 600 this file)
+# model = "gemini-2.5-flash"            # default; any model your key can use
+# timeout = 600
+
+# Any OpenAI-compatible server: OpenAI, OpenRouter, LM Studio, vLLM, llama.cpp... pick a name, then
+# use it in provider = "..." above.
+# [providers.openrouter]
+# type = "openai"
+# url = "https://openrouter.ai/api/v1"
+# api_key_env = "OPENROUTER_API_KEY"
+# model = "google/gemini-2.5-flash"
+#
+# A second Ollama (another machine / model):
+# [providers.big-ollama]
+# type = "ollama"
+# url = "http://gpu-box:11434"
+# model = "qwen3:32b"

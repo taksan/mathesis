@@ -6,9 +6,19 @@ from .config import Settings
 
 
 class OllamaClient:
-    def __init__(self, settings: Settings):
-        self.url, self.model, self.num_ctx = settings.ollama_url, settings.model, settings.num_ctx
+    def __init__(self, settings: Settings, spec: dict | None = None):
+        spec = spec or {}  # a provider table (several Ollama servers / models can be configured); default: the settings
+        self.url = str(spec.get("url", settings.ollama_url)).rstrip("/")
+        self.model = spec.get("model") or settings.model
+        self.num_ctx = int(spec.get("num_ctx", settings.num_ctx))
         self.embed_model = settings.embed_model
+
+    @property
+    def label(self) -> str:
+        return self.model
+
+    def check(self) -> tuple[bool, str]:
+        return self.check_model()
 
     def installed_models(self) -> list[str]:
         with urllib.request.urlopen(f"{self.url}/api/tags", timeout=10) as resp:

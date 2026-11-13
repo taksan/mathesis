@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import urllib.parse
 from pathlib import Path
 
@@ -87,7 +88,7 @@ def test_disabled_notifications_do_not_spawn_anything(monkeypatch):
 def _run_write_summary(tmp_path, monkeypatch, **settings):
     captured = {}
     monkeypatch.setattr(pipeline, "summarize", lambda *a, **k: ("## The big idea\nx", {"prompts": "p", "revisions": 0}))
-    monkeypatch.setattr(pipeline, "OllamaClient", lambda s: None)
+    monkeypatch.setattr(pipeline, "make_client", lambda s, role: SimpleNamespace(check=lambda: (True, "ok"), label="m"))
     monkeypatch.setattr(pipeline, "notify", lambda title, body="", **kw: captured.update(title=title, **kw))
     opened = []
     monkeypatch.setattr(pipeline, "open_in_obsidian", lambda path, cmd=None: opened.append((path, cmd)))
