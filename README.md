@@ -20,6 +20,7 @@ Pull the model once: `ollama pull gemma4:12b` (not needed if you use another pro
 
 ```bash
 mathesis serve                           # server on 127.0.0.1:5000, hot reload on code changes
+# the first line it prints is the version, e.g. "Mathesis 0.1.0 (build 50.778ef39)": <commit count>.<sha> of the checkout, "+dirty" if files are uncommitted
 mathesis summarize PATH [PATH ...]       # write <file>-summary.md for transcript files, or every .md in a folder
 mathesis summarize lesson.md --stdout    # print the notes instead of writing a file
 mathesis doctor

@@ -42,10 +42,13 @@ def _settings(args) -> Settings:
 # ---------------------------------------------------------------- serve
 def cmd_serve(args) -> int:
     import uvicorn
+    from .version import describe
+    shown = describe()
+    print(shown, flush=True)  # first thing, before the config is read: a bad config must not hide which version ran
     s = _settings(args)
     # flags travel to the (reloaded) server process through the environment
     os.environ.update({
-        "MATHESIS_HOST": s.host, "MATHESIS_PORT": str(s.port), "MATHESIS_ROOT": str(s.root),
+        "MATHESIS_VERSION_SHOWN": shown, "MATHESIS_HOST": s.host, "MATHESIS_PORT": str(s.port), "MATHESIS_ROOT": str(s.root),
         "MATHESIS_MODEL": s.model, "MATHESIS_OLLAMA_URL": s.ollama_url, "MATHESIS_NUM_CTX": str(s.num_ctx),
         "MATHESIS_SUMMARIZE": "1" if s.summarize else "0", "MATHESIS_NOTIFY": "1" if s.notify else "0",
         "MATHESIS_LAB_GUIDE": "1" if s.lab_guide else "0", "MATHESIS_NOTIFY_ON_SAVE": "1" if s.notify_on_save else "0", "MATHESIS_PIPELINE": s.pipeline,

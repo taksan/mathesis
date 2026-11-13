@@ -10,6 +10,7 @@ GET  /reports  list of reports (newest first); /reports/<id> one report's detail
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
 """
 import json
+import os
 import re
 import threading
 from contextlib import asynccontextmanager
@@ -42,6 +43,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app):
+        from .version import describe
+        version = describe()
+        if version != os.environ.get("MATHESIS_VERSION_SHOWN"):  # `uvicorn mathesis.server:app` directly, or a code reload
+            print(version, flush=True)
         print(f"Mathesis listening on http://{settings.host}:{settings.port}  (writing under {settings.root})")
         if settings.config_path:
             print(f"config: {settings.config_path}")
