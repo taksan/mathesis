@@ -30,7 +30,7 @@ def gemini(monkeypatch, **spec):
 def test_gemini_is_a_builtin_openai_compatible_provider(monkeypatch):
     spec = Settings(summary_provider="gemini").provider_spec("gemini", "gemini-2.5-pro")
     assert spec["type"] == "openai" and spec["url"].endswith("/v1beta/openai") and spec["model"] == "gemini-2.5-pro"
-    assert make_client(Settings(summary_provider="gemini"), "summary").label == "gemini:gemini-2.5-flash"
+    assert make_client(Settings(summary_provider="gemini"), "summary").label == "gemini:gemini-3.8-flash"
 
 
 def test_chat_posts_openai_format_with_bearer_key(monkeypatch):
@@ -43,7 +43,7 @@ def test_chat_posts_openai_format_with_bearer_key(monkeypatch):
     monkeypatch.setattr(llm.urllib.request, "urlopen", urlopen)
     assert gemini(monkeypatch).chat("sys", "usr", 0.1) == "hello"
     assert seen["url"].endswith("/v1beta/openai/chat/completions") and seen["auth"] == "Bearer k-123"
-    assert seen["body"]["model"] == "gemini-2.5-flash" and seen["body"]["messages"][0] == {"role": "system", "content": "sys"}
+    assert seen["body"]["model"] == "gemini-3.8-flash" and seen["body"]["messages"][0] == {"role": "system", "content": "sys"}
 
 
 def test_rate_limits_are_retried_then_reported_without_the_key(monkeypatch):

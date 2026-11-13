@@ -22,7 +22,7 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai"  # Gemini
 BUILTIN_PROVIDERS = {
     "ollama": {"type": "ollama"},
     "claude-code": {"type": "claude-code"},
-    "gemini": {"type": "openai", "url": GEMINI_URL, "api_key_env": "GEMINI_API_KEY", "model": "gemini-2.5-flash"},
+    "gemini": {"type": "openai", "url": GEMINI_URL, "api_key_env": "GEMINI_API_KEY", "model": "gemini-3.8-flash"},
     "openai": {"type": "openai", "url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY"},
 }
 PROVIDER_TYPES = ("ollama", "openai", "claude-code")

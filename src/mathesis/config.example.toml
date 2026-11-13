@@ -17,14 +17,14 @@
 [summary]
 # enabled = true
 provider = "ollama"                     # ollama | gemini | openai | claude-code | <a [providers.<name>] below> | "none"
-# model = "gemini-2.5-pro"              # overrides the provider's model for summaries only
+# model = "gemini-3.8-flash"            # overrides the provider's model for summaries only
 # pipeline = "two-stage"                # or "single" (one call; cheaper on an API)
 # max_revisions = 2
 
 [lab_guide]
 # enabled = true
 provider = "claude-code"                # same choices. Try "gemini" if you do not use Claude Code
-# model = "gemini-2.5-pro"              # lab guides profit from a stronger model than summaries
+# model = "gemini-3.8-flash"            # overrides it for lab guides only (a stronger model may suit them)
 
 # ---- providers -------------------------------------------------------------------------------------------------
 # Built in: ollama, claude-code, gemini, openai. A table here changes or extends them.
@@ -43,7 +43,7 @@ provider = "claude-code"                # same choices. Try "gemini" if you do n
 [providers.gemini]                      # Gemini through its OpenAI-compatible endpoint
 # api_key_env = "GEMINI_API_KEY"        # NAME of the environment variable holding the key (preferred)
 # api_key = "..."                       # or the key itself (then: chmod 600 this file)
-# model = "gemini-2.5-flash"            # default; any model your key can use
+# model = "gemini-3.8-flash"            # default; any model your key can use (2.5 models are deprecated)
 # timeout = 600
 
 # Any OpenAI-compatible server: OpenAI, OpenRouter, LM Studio, vLLM, llama.cpp... pick a name, then
@@ -52,7 +52,7 @@ provider = "claude-code"                # same choices. Try "gemini" if you do n
 # type = "openai"
 # url = "https://openrouter.ai/api/v1"
 # api_key_env = "OPENROUTER_API_KEY"
-# model = "google/gemini-2.5-flash"
+# model = "google/gemini-3.8-flash"     # check OpenRouter's model list for the exact id
 #
 # A second Ollama (another machine / model):
 # [providers.big-ollama]

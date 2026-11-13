@@ -76,13 +76,13 @@ provider = "ollama"            # ollama | gemini | openai | claude-code | <your 
 
 [lab_guide]
 provider = "gemini"            # default is claude-code
-model = "gemini-2.5-pro"       # overrides the provider's model for this job only
+model = "gemini-3.8-flash"     # overrides the provider's model for this job only
 
 [providers.gemini]
 api_key_env = "GEMINI_API_KEY" # NAME of the environment variable that holds the key
 ```
 
-Export the key in the environment of the server (`export GEMINI_API_KEY=...`). `api_key = "..."` in the file also works (keep it `chmod 600`; `mathesis config --init` does that). Gemini is reached through its OpenAI-compatible endpoint, so any other OpenAI-style server works the same way: add `[providers.<name>]` with `type = "openai"`, `url`, `model` (and `api_key_env` if it needs a key), e.g. OpenRouter, LM Studio, vLLM. Rate-limit answers (HTTP 429/5xx) are retried with a pause. The default Gemini model is `gemini-2.5-flash`; change `model` for another one.
+Export the key in the environment of the server (`export GEMINI_API_KEY=...`). `api_key = "..."` in the file also works (keep it `chmod 600`; `mathesis config --init` does that). Gemini is reached through its OpenAI-compatible endpoint, so any other OpenAI-style server works the same way: add `[providers.<name>]` with `type = "openai"`, `url`, `model` (and `api_key_env` if it needs a key), e.g. OpenRouter, LM Studio, vLLM. Rate-limit answers (HTTP 429/5xx) are retried with a pause. The default Gemini model is `gemini-3.8-flash` (the 2.5 models are deprecated); change `model` for another one, since Google renames models often.
 
 **Fallback.** If the chosen backend is down, unreachable, has no key or (Claude Code) is not installed, the lesson or lab is saved anyway and only the summary / lab guide is skipped, with one desktop notification per outage ("Saved without summary"). The backend is checked again on every save, so starting Ollama later is enough. `provider = "none"` (or `--no-summary`) switches a job off on purpose.
 
