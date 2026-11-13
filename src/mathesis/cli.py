@@ -119,6 +119,8 @@ def cmd_doctor(args) -> int:
         bad += ok is False
         print(f"[{mark}] {text}")
 
+    for name in s.unused_providers():
+        report(None, f"[providers.{name}] is configured but not used: set provider = \"{name}\" in [summary] and/or [lab_guide]")
     report(None if s.config_path is None else True,
            f"config file: {s.config_path or 'none (defaults; mathesis config --init writes an example)'}")
     for what, enabled, role in [("summaries", s.summary_enabled, "summary"), ("lab guides", s.lab_guide_enabled, "lab_guide")]:
@@ -188,6 +190,8 @@ def cmd_config(args) -> int:
         return 0
     s = _settings(args)
     print(f"config file: {s.config_path or 'none'} (default location: {DEFAULT_CONFIG})")
+    for name in s.unused_providers():
+        print(f"warning: [providers.{name}] is configured but not used: set provider = \"{name}\" in [summary] and/or [lab_guide]")
     for what, provider, model in [("summaries", s.summary_provider, s.summary_model), ("lab guides", s.lab_provider, s.lab_model)]:
         if provider == "none":
             print(f"{what}: off")

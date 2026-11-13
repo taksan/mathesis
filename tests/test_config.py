@@ -105,3 +105,21 @@ def test_cli_reports_config_errors(tmp_path, capsys):
     f = write(tmp_path, '[summary]\nprovider = "nope"\n')
     assert cli.main(["doctor", "--config", str(f)]) == 2
     assert "config error" in capsys.readouterr().err
+
+
+def test_model_without_provider_is_an_error_not_a_silent_ollama_request(tmp_path):
+    f = write(tmp_path, '[summary]\nmodel = "gemini-3.8-flash"\n[lab_guide]\nprovider = "gemini"\n')
+    with pytest.raises(ConfigError, match=r"\[summary\] sets model .* no provider"):
+        Settings.from_env(f)
+    ok = write(tmp_path, '[summary]\nprovider = "gemini"\nmodel = "gemini-3.8-flash"\n')
+    assert Settings.from_env(ok).summary_model == "gemini-3.8-flash"
+
+
+def test_configured_but_unused_provider_is_reported(tmp_path, capsys):
+    f = write(tmp_path, '[providers.gemini]\nmodel = "m"\n[providers.ollama]\n[lab_guide]\nprovider = "claude-code"\n')
+    s = Settings.from_env(f)
+    assert s.unused_providers() == ["gemini"]                          # empty tables do not count
+    assert cli.main(["config", "--config", str(f)]) == 0
+    assert "[providers.gemini] is configured but not used" in capsys.readouterr().out
+    used = write(tmp_path, '[providers.gemini]\nmodel = "m"\n[summary]\nprovider = "gemini"\n')
+    assert Settings.from_env(used).unused_providers() == []

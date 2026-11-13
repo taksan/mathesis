@@ -45,6 +45,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print(f"Mathesis listening on http://{settings.host}:{settings.port}  (writing under {settings.root})")
         if settings.config_path:
             print(f"config: {settings.config_path}")
+        for name in settings.unused_providers():
+            print(f"WARNING: [providers.{name}] is set in the config but neither [summary] nor [lab_guide] has "
+                  f"provider = \"{name}\", so it is not used")
         for role, enabled, what in [("summary", settings.summary_enabled, "Summaries"),
                                     ("lab_guide", settings.lab_guide_enabled, "Lab guides")]:
             if not enabled:

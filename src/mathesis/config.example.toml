@@ -17,17 +17,18 @@
 [summary]
 # enabled = true
 provider = "ollama"                     # ollama | gemini | openai | claude-code | <a [providers.<name>] below> | "none"
-# model = "gemini-3.8-flash"            # overrides the provider's model for summaries only
+# model = "..."                         # optional; needs the provider above. Overrides that provider's model for summaries only
 # pipeline = "two-stage"                # or "single" (one call; cheaper on an API)
 # max_revisions = 2
 
 [lab_guide]
 # enabled = true
-provider = "claude-code"                # same choices. Try "gemini" if you do not use Claude Code
-# model = "gemini-3.8-flash"            # overrides it for lab guides only (a stronger model may suit them)
+provider = "claude-code"                # same choices, e.g. "gemini"
+# model = "..."                         # optional; needs the provider above. Overrides it for lab guides only
 
 # ---- providers -------------------------------------------------------------------------------------------------
-# Built in: ollama, claude-code, gemini, openai. A table here changes or extends them.
+# Built in: ollama, claude-code, gemini, openai. A table here changes or extends them, but a provider is only USED
+# when [summary] and/or [lab_guide] above name it in `provider = ...` (mathesis config / doctor warn if it is not).
 
 [providers.ollama]
 # url = "http://172.17.0.1:11434"

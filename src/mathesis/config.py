@@ -102,6 +102,7 @@ class Settings:
     lab_provider: str = "claude-code"      # same choices; "none" = no lab guides
     lab_model: str | None = None           # overrides the provider's model for lab guides
     providers: dict = field(default_factory=dict)  # [providers.<name>] tables from the config file (not ollama / claude-code)
+    configured_providers: tuple = ()       # names of every [providers.<name>] table in the file that sets something
     config_path: Path | None = None        # the config file in use
 
     @property
@@ -135,6 +136,10 @@ class Settings:
         spec["name"] = name
         return spec
 
+    def unused_providers(self) -> list[str]:
+        """Providers the file configures that neither summaries nor lab guides use (a forgotten `provider = ...` line)."""
+        return sorted(set(self.configured_providers) - {self.summary_provider, self.lab_provider})
+
     def validate(self) -> "Settings":
         for provider in {self.summary_provider, self.lab_provider} - {"none"}:
             self.provider_spec(provider)
@@ -148,6 +153,12 @@ class Settings:
         tables = dict(raw.get("providers", {}))
         ollama, claude = tables.pop("ollama", {}), tables.pop("claude-code", {})
         e = os.environ.get
+        for section, name, env in [(summary, "summary", "MATHESIS_SUMMARY_PROVIDER"), (lab, "lab_guide", "MATHESIS_LAB_PROVIDER")]:
+            if section.get("model") and not section.get("provider") and e(env) is None:
+                # without this, the model name would be sent to the default provider (Ollama) and fail there
+                raise ConfigError(f"{path}: [{name}] sets model = {section['model']!r} but no provider: the default "
+                                  f"provider ({'ollama' if name == 'summary' else 'claude-code'}) would be asked for it. "
+                                  f"Add provider = \"gemini\" (or ollama, openai, ...) to [{name}].")
 
         def pick(env, value, default, conv=lambda v: v):
             """environment variable, else config file value, else default"""
@@ -187,5 +198,6 @@ class Settings:
             lab_provider=pick("MATHESIS_LAB_PROVIDER", lab.get("provider"), cls.lab_provider),
             lab_model=lab.get("model") or None,
             providers=tables,
+            configured_providers=tuple(n for n, t in raw.get("providers", {}).items() if t),
             config_path=path,
         ).validate()
