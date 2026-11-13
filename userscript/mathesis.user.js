@@ -379,6 +379,25 @@
   (document.body || document.documentElement).appendChild(openButton);
   console.log('[Mathesis] button added');
 
+  // First use on this site: a toast says the buttons can be toggled with a double Shift (shown once, then remembered).
+  (function showFirstUseHint() {
+    const HINT_KEY = 'mathesis-hint-shown';
+    try { if (localStorage.getItem(HINT_KEY)) return; } catch (e) { return; } // storage blocked: never nag on every page
+    if (button.style.display === 'none') return;
+    const toast = document.createElement('div');
+    toast.id = 'mathesis-toast';
+    toast.setAttribute('role', 'status');
+    toast.textContent = 'Mathesis: press Shift twice to hide or show these buttons.';
+    toast.style.cssText = 'position:fixed;top:16px;right:56px;max-width:300px;z-index:2147483647;padding:12px 16px;' +
+      'background:#202124;color:#fff;border-radius:6px;font:14px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4);' +
+      'cursor:pointer;transition:opacity .4s;';
+    const close = () => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); };
+    toast.addEventListener('click', close);
+    (document.body || document.documentElement).appendChild(toast);
+    setTimeout(close, 8000);
+    try { localStorage.setItem(HINT_KEY, '1'); } catch (e) { /* not remembered */ }
+  })();
+
   // Check now, and again whenever the lesson changes (the site may navigate without a reload).
   refreshStatus();
   let lastUrl = location.href;

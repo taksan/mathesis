@@ -46,7 +46,7 @@ GET /reports/<id>/html       the page as it was (served as plain text, never ren
 GET /reports/<id>/body       what the script sent (the lesson URL for bundles, the text otherwise)
 ```
 
-Press **Shift twice** quickly on a page to hide or show the button (remembered per site).
+Press **Shift twice** quickly on a page to hide or show the button (remembered per site).  The first time a script runs on a site, a toast (click to dismiss, gone after 8 s) tells you this; it is shown once per site.
 
 ## Installing the userscripts from the server
 
