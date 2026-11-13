@@ -1,10 +1,29 @@
 # Mathesis configuration. `mathesis config --init` writes this file as config.toml in the application directory
-# (gitignored: it may hold an API key). Keep what you change.
-# Every key is optional. Precedence: this file < MATHESIS_* environment variables < command-line flags.
-# Restart `mathesis serve` after editing. `mathesis doctor` checks that the chosen backends work.
+# (gitignored: it may hold an API key). Keep what you change; every key is optional.
+# Precedence: this file < MATHESIS_* environment variables < command-line flags.
+# Restart `mathesis serve` after editing. `mathesis config` shows what is in effect, `mathesis doctor` tests it.
 #
-# If a backend is unreachable or not configured, lessons and labs are still saved: only the summary / lab guide is
+# If the provider is unreachable or not configured, lessons and labs are still saved: only the summary / lab guide is
 # skipped (one desktop notification per outage). It is checked again on every save, so starting Ollama later works.
+
+# The ONE provider used for everything (summaries and lab guides):
+#   ollama | gemini | openai | claude-code | <a name you define under [providers.<name>] below> | none
+# Without this line: summaries use ollama and lab guides use claude-code (the original behavior).
+# provider = "gemini"
+
+[summary]
+# Only to override the provider above for summaries:
+# provider = "ollama"
+# model = "gemma4:12b"          # a model of the provider in effect (the default one if no provider line here)
+# pipeline = "two-stage"        # or "single" (one call; cheaper on an API)
+# max_revisions = 2
+# enabled = true                # false: lessons are only saved
+
+[lab_guide]
+# Only to override the provider above for lab guides:
+# provider = "claude-code"
+# model = "..."
+# enabled = true
 
 [server]
 # host = "127.0.0.1"
@@ -14,21 +33,9 @@
 # notify_on_save = false
 # obsidian_open = true
 
-[summary]
-# enabled = true
-provider = "ollama"                     # ollama | gemini | openai | claude-code | <a [providers.<name>] below> | "none"
-# model = "..."                         # optional; needs the provider above. Overrides that provider's model for summaries only
-# pipeline = "two-stage"                # or "single" (one call; cheaper on an API)
-# max_revisions = 2
-
-[lab_guide]
-# enabled = true
-provider = "claude-code"                # same choices, e.g. "gemini"
-# model = "..."                         # optional; needs the provider above. Overrides it for lab guides only
-
-# ---- providers -------------------------------------------------------------------------------------------------
-# Built in: ollama, claude-code, gemini, openai. A table here changes or extends them, but a provider is only USED
-# when [summary] and/or [lab_guide] above name it in `provider = ...` (mathesis config / doctor warn if it is not).
+# ---- provider details -------------------------------------------------------------------------------------------
+# Built in: ollama, claude-code, gemini, openai. A table here changes or extends them. A provider is only USED when it
+# is the `provider` above (or a job's override); `mathesis config` / `doctor` warn about one that is configured but unused.
 
 [providers.ollama]
 # url = "http://172.17.0.1:11434"
@@ -48,7 +55,7 @@ provider = "claude-code"                # same choices, e.g. "gemini"
 # timeout = 600
 
 # Any OpenAI-compatible server: OpenAI, OpenRouter, LM Studio, vLLM, llama.cpp... pick a name, then
-# use it in provider = "..." above.
+# use it as `provider = "<name>"` above.
 # [providers.openrouter]
 # type = "openai"
 # url = "https://openrouter.ai/api/v1"

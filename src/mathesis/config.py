@@ -58,6 +58,10 @@ def read_config(path: Path) -> dict:
     for section, value in raw.items():
         if section == "providers":
             continue
+        if section == "provider":
+            if not isinstance(value, str):
+                raise ConfigError(f"{path}: provider must be a name, e.g. provider = \"gemini\"")
+            continue
         if section not in KNOWN_KEYS or not isinstance(value, dict):
             raise ConfigError(f"{path}: unknown section [{section}] (known: {', '.join(KNOWN_KEYS)}, providers.<name>)")
         unknown = set(value) - KNOWN_KEYS[section]
@@ -97,9 +101,10 @@ class Settings:
     claude_timeout: int = 900              # seconds
     obsidian_open: bool = True             # "Summary ready" notification opens the summary in Obsidian when clicked
     obsidian_command: str | None = None    # command that hands an obsidian:// URI to Obsidian (auto-detected if unset)
-    summary_provider: str = "ollama"       # ollama | gemini | openai | <name in [providers.*]> | none
+    default_provider: str | None = None    # the one provider for every job; [summary] / [lab_guide] override it
+    summary_provider: str = "ollama"       # resolved: ollama | gemini | openai | <name in [providers.*]> | none
     summary_model: str | None = None       # overrides the provider's model for summaries
-    lab_provider: str = "claude-code"      # same choices; "none" = no lab guides
+    lab_provider: str = "claude-code"      # resolved, same choices; "none" = no lab guides
     lab_model: str | None = None           # overrides the provider's model for lab guides
     providers: dict = field(default_factory=dict)  # [providers.<name>] tables from the config file (not ollama / claude-code)
     configured_providers: tuple = ()       # names of every [providers.<name>] table in the file that sets something
@@ -141,7 +146,7 @@ class Settings:
         return sorted(set(self.configured_providers) - {self.summary_provider, self.lab_provider})
 
     def validate(self) -> "Settings":
-        for provider in {self.summary_provider, self.lab_provider} - {"none"}:
+        for provider in {self.default_provider, self.summary_provider, self.lab_provider} - {None, "none"}:
             self.provider_spec(provider)
         return self
 
@@ -153,12 +158,7 @@ class Settings:
         tables = dict(raw.get("providers", {}))
         ollama, claude = tables.pop("ollama", {}), tables.pop("claude-code", {})
         e = os.environ.get
-        for section, name, env in [(summary, "summary", "MATHESIS_SUMMARY_PROVIDER"), (lab, "lab_guide", "MATHESIS_LAB_PROVIDER")]:
-            if section.get("model") and not section.get("provider") and e(env) is None:
-                # without this, the model name would be sent to the default provider (Ollama) and fail there
-                raise ConfigError(f"{path}: [{name}] sets model = {section['model']!r} but no provider: the default "
-                                  f"provider ({'ollama' if name == 'summary' else 'claude-code'}) would be asked for it. "
-                                  f"Add provider = \"gemini\" (or ollama, openai, ...) to [{name}].")
+        default = e("MATHESIS_PROVIDER") or raw.get("provider") or None
 
         def pick(env, value, default, conv=lambda v: v):
             """environment variable, else config file value, else default"""
@@ -193,9 +193,11 @@ class Settings:
             claude_timeout=pick("MATHESIS_CLAUDE_TIMEOUT", claude.get("timeout"), cls.claude_timeout, int),
             obsidian_open=flag("MATHESIS_OBSIDIAN_OPEN", server.get("obsidian_open"), True),
             obsidian_command=pick("MATHESIS_OBSIDIAN", server.get("obsidian_command"), None) or None,
-            summary_provider=pick("MATHESIS_SUMMARY_PROVIDER", summary.get("provider"), cls.summary_provider),
+            default_provider=default,
+            # a job's own provider, else the one default provider; with neither, the built-in choice per job
+            summary_provider=e("MATHESIS_SUMMARY_PROVIDER") or summary.get("provider") or default or cls.summary_provider,
             summary_model=summary.get("model") or None,
-            lab_provider=pick("MATHESIS_LAB_PROVIDER", lab.get("provider"), cls.lab_provider),
+            lab_provider=e("MATHESIS_LAB_PROVIDER") or lab.get("provider") or default or cls.lab_provider,
             lab_model=lab.get("model") or None,
             providers=tables,
             configured_providers=tuple(n for n, t in raw.get("providers", {}).items() if t),

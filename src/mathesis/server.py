@@ -46,8 +46,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.config_path:
             print(f"config: {settings.config_path}")
         for name in settings.unused_providers():
-            print(f"WARNING: [providers.{name}] is set in the config but neither [summary] nor [lab_guide] has "
-                  f"provider = \"{name}\", so it is not used")
+            print(f"WARNING: [providers.{name}] is set in the config but is not the default provider nor a job's "
+                  f"override, so it is not used (provider = \"{name}\" at the top of the file selects it)")
         for role, enabled, what in [("summary", settings.summary_enabled, "Summaries"),
                                     ("lab_guide", settings.lab_guide_enabled, "Lab guides")]:
             if not enabled:

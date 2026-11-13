@@ -33,7 +33,7 @@ Some Google Skills lessons are **documents** whose text is not in the page at al
 
 If a page has no recognisable content (no transcript, quiz or lab text), the button saves the **whole page HTML** instead: `X-Mathesis-Kind: raw`, file `<course>/<NN-lesson>.raw.html` next to the lessons (or `_raw/<url words>.raw.html` when the page title can't be read). Raw pages are never summarized; they are kept so the page can be analysed and the script taught about it.
 
-On a **lab** page the button reads "Copy Lab" (`X-Mathesis-Kind: lab`). The lab instructions are saved and summarized like a transcript, and, by default, **Claude Code** (the `claude` CLI, run headless with `claude -p`, no tools, empty temporary folder, so it can only turn text into text) also writes `<lab>-lab-guide.md` next to it: the resources the lab creates, a setup block (variables, APIs), `gcloud` commands per lab task, Terraform only for what gcloud cannot create, verification commands and clean-up. Commands it is unsure about carry a `# VERIFY:` comment; read them before running anything. It takes about a minute and runs in parallel with the summary; a notification ("Lab guide ready") opens the guide in Obsidian. `--no-lab-guide` / `MATHESIS_LAB_GUIDE=0` turns it off, `MATHESIS_CLAUDE_MODEL` picks the model, `MATHESIS_CLAUDE` the CLI path; the prompt is `src/mathesis/prompts/lab_guide.txt`. This uses your Claude Code login (usage counts against it); `[lab_guide] provider` in the config file switches it to Gemini, Ollama or another API.
+On a **lab** page the button reads "Copy Lab" (`X-Mathesis-Kind: lab`). The lab instructions are saved and summarized like a transcript, and, by default, **Claude Code** (the `claude` CLI, run headless with `claude -p`, no tools, empty temporary folder, so it can only turn text into text) also writes `<lab>-lab-guide.md` next to it: the resources the lab creates, a setup block (variables, APIs), `gcloud` commands per lab task, Terraform only for what gcloud cannot create, verification commands and clean-up. Commands it is unsure about carry a `# VERIFY:` comment; read them before running anything. It takes about a minute and runs in parallel with the summary; a notification ("Lab guide ready") opens the guide in Obsidian. `--no-lab-guide` / `MATHESIS_LAB_GUIDE=0` turns it off, `MATHESIS_CLAUDE_MODEL` picks the model, `MATHESIS_CLAUDE` the CLI path; the prompt is `src/mathesis/prompts/lab_guide.txt`. This uses your Claude Code login (usage counts against it); `provider` in the config file switches it (together with summaries) to Gemini, Ollama or another API; `[lab_guide] provider` switches only the lab guides.
 
 When a lesson is already saved, a second purple button **Open in Obsidian** appears under the main one. It asks the server for the link at click time (the summary if it exists, else the lesson file), so the userscript never holds a local path; this needs the `obsidian://` handler registered on your system.
 
@@ -68,19 +68,23 @@ On a **quiz results** page the button reads "Copy Incorrect + To Review": it rea
 
 Settings can live in a TOML file: `--config`, else `$MATHESIS_CONFIG`, else `config.toml` in the application directory (the checkout; it is gitignored, so an API key in it is never committed). `mathesis config --init` writes a commented example there (`src/mathesis/config.example.toml`); `mathesis config` shows what is in use; `mathesis doctor` tests the backends. Precedence: file < `MATHESIS_*` environment variables < command-line flags. Restart `mathesis serve` after editing; a mistyped key or unknown provider is reported with its name instead of being ignored.
 
-Summaries and lab guides each pick a **provider** (and optionally a model), so they can differ:
+One **provider** serves everything (summaries and lab guides); a job overrides it only when it needs something different:
 
 ```toml
-[summary]
-provider = "ollama"            # ollama | gemini | openai | claude-code | <your own table> | "none"
+provider = "gemini"            # the one provider: ollama | gemini | openai | claude-code | <your own table> | none
+
+[summary]                      # optional: only what differs from the above
+# model = "gemini-3.8-flash"   # another model of the same provider
+# provider = "ollama"          # or another provider, for this job only
 
 [lab_guide]
-provider = "gemini"            # default is claude-code
-model = "gemini-3.8-flash"     # overrides the provider's model for this job only
+# provider = "claude-code"
 
-[providers.gemini]
+[providers.gemini]             # details of a provider (url, model, key); only used when it is selected above
 api_key_env = "GEMINI_API_KEY" # NAME of the environment variable that holds the key
 ```
+
+Without a `provider` line the original behavior stays: Ollama for summaries, Claude Code for lab guides. `mathesis config` shows the provider each job ends up with (`[default]` or `[override]`) and warns about a configured provider nothing uses.
 
 Export the key in the environment of the server (`export GEMINI_API_KEY=...`). `api_key = "..."` in the file also works (keep it `chmod 600`; `mathesis config --init` does that). Gemini is reached through its OpenAI-compatible endpoint, so any other OpenAI-style server works the same way: add `[providers.<name>]` with `type = "openai"`, `url`, `model` (and `api_key_env` if it needs a key), e.g. OpenRouter, LM Studio, vLLM. Rate-limit answers (HTTP 429/5xx) are retried with a pause. The default Gemini model is `gemini-3.8-flash` (the 2.5 models are deprecated); change `model` for another one, since Google renames models often.
 
@@ -96,7 +100,8 @@ They override the config file; command-line flags override them.
 |---|---|---|
 | `MATHESIS_ROOT` | the Obsidian `_study_roadmap` folder (holds `Google Skills/` and `Udemy/`) | the only folder the server may write into |
 | `MATHESIS_CONFIG` | `config.toml` in the application directory | the config file |
-| `MATHESIS_SUMMARY_PROVIDER` / `MATHESIS_LAB_PROVIDER` | `ollama` / `claude-code` | provider per job (`none` = off) |
+| `MATHESIS_PROVIDER` | none (`ollama` for summaries, `claude-code` for lab guides) | the one provider for every job |
+| `MATHESIS_SUMMARY_PROVIDER` / `MATHESIS_LAB_PROVIDER` | the provider above | override per job (`none` = off) |
 | `MATHESIS_MODEL` | `gemma4:12b` | Ollama model used for every stage |
 | `MATHESIS_OLLAMA_URL` | `http://172.17.0.1:11434` | Ollama server |
 | `MATHESIS_NUM_CTX` | `16384` | context window (Ollama's default of 2048 truncates transcripts) |

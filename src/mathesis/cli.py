@@ -120,7 +120,7 @@ def cmd_doctor(args) -> int:
         print(f"[{mark}] {text}")
 
     for name in s.unused_providers():
-        report(None, f"[providers.{name}] is configured but not used: set provider = \"{name}\" in [summary] and/or [lab_guide]")
+        report(None, f"[providers.{name}] is configured but not used: set provider = \"{name}\" at the top of the file")
     report(None if s.config_path is None else True,
            f"config file: {s.config_path or 'none (defaults; mathesis config --init writes an example)'}")
     for what, enabled, role in [("summaries", s.summary_enabled, "summary"), ("lab guides", s.lab_guide_enabled, "lab_guide")]:
@@ -191,7 +191,8 @@ def cmd_config(args) -> int:
     s = _settings(args)
     print(f"config file: {s.config_path or 'none'} (default location: {DEFAULT_CONFIG})")
     for name in s.unused_providers():
-        print(f"warning: [providers.{name}] is configured but not used: set provider = \"{name}\" in [summary] and/or [lab_guide]")
+        print(f"warning: [providers.{name}] is configured but not used: set provider = \"{name}\" at the top of the file")
+    print(f"default provider: {s.default_provider or 'none set (built-in: ollama for summaries, claude-code for lab guides)'}")
     for what, provider, model in [("summaries", s.summary_provider, s.summary_model), ("lab guides", s.lab_provider, s.lab_model)]:
         if provider == "none":
             print(f"{what}: off")
@@ -199,7 +200,8 @@ def cmd_config(args) -> int:
         spec = s.provider_spec(provider, model)
         shown = {k: v for k, v in spec.items() if k not in ("api_key", "name") and v is not None}
         key = " (api_key set in file)" if spec.get("api_key") else ""
-        print(f"{what}: {provider} {shown}{key}")
+        note = "" if s.default_provider is None else (" [default]" if provider == s.default_provider else " [override]")
+        print(f"{what}: {provider}{note} {shown}{key}")
     return 0
 
 

@@ -25,12 +25,11 @@ def test_no_file_means_defaults():
 
 def test_file_values_env_overrides_file(tmp_path, monkeypatch):
     f = write(tmp_path, '''
-[summary]
 provider = "gemini"
+[summary]
 model = "gemini-2.5-pro"
 pipeline = "single"
 [lab_guide]
-provider = "gemini"
 enabled = false
 [providers.ollama]
 url = "http://gpu:11434/"
@@ -60,7 +59,6 @@ def test_flags_beat_the_file(tmp_path):
 
 def test_custom_provider_table(tmp_path):
     f = write(tmp_path, '''
-[summary]
 provider = "openrouter"
 [providers.openrouter]
 type = "openai"
@@ -107,19 +105,42 @@ def test_cli_reports_config_errors(tmp_path, capsys):
     assert "config error" in capsys.readouterr().err
 
 
-def test_model_without_provider_is_an_error_not_a_silent_ollama_request(tmp_path):
-    f = write(tmp_path, '[summary]\nmodel = "gemini-3.8-flash"\n[lab_guide]\nprovider = "gemini"\n')
-    with pytest.raises(ConfigError, match=r"\[summary\] sets model .* no provider"):
-        Settings.from_env(f)
-    ok = write(tmp_path, '[summary]\nprovider = "gemini"\nmodel = "gemini-3.8-flash"\n')
-    assert Settings.from_env(ok).summary_model == "gemini-3.8-flash"
+def test_one_default_provider_serves_both_jobs_and_jobs_override_it(tmp_path):
+    s = Settings.from_env(write(tmp_path, 'provider = "gemini"\n'))
+    assert (s.default_provider, s.summary_provider, s.lab_provider) == ("gemini", "gemini", "gemini")
+    s = Settings.from_env(write(tmp_path, 'provider = "gemini"\n[lab_guide]\nprovider = "claude-code"\n[summary]\nmodel = "m-1"\n'))
+    assert (s.summary_provider, s.summary_model, s.lab_provider) == ("gemini", "m-1", "claude-code")
+    s = Settings.from_env(write(tmp_path, 'provider = "gemini"\n[summary]\nprovider = "none"\n'))
+    assert s.summary_provider == "none" and not s.summary_enabled and s.lab_provider == "gemini"
+
+
+def test_without_a_default_the_original_choices_stay(tmp_path):
+    s = Settings.from_env(write(tmp_path, '[summary]\nmodel = "qwen3:8b"\n'))
+    assert (s.default_provider, s.summary_provider, s.lab_provider) == (None, "ollama", "claude-code")
+    assert s.provider_spec("ollama", s.summary_model)["model"] == "qwen3:8b"
+
+
+def test_env_overrides_the_default_provider(tmp_path, monkeypatch):
+    f = write(tmp_path, 'provider = "gemini"\n')
+    monkeypatch.setenv("MATHESIS_PROVIDER", "ollama")
+    assert Settings.from_env(f).lab_provider == "ollama"
+    monkeypatch.setenv("MATHESIS_LAB_PROVIDER", "claude-code")
+    s = Settings.from_env(f)
+    assert (s.summary_provider, s.lab_provider) == ("ollama", "claude-code")
+
+
+def test_default_provider_must_exist(tmp_path):
+    with pytest.raises(ConfigError, match="not defined"):
+        Settings.from_env(write(tmp_path, 'provider = "gemin"\n'))
+    with pytest.raises(ConfigError, match="must be a name"):
+        Settings.from_env(write(tmp_path, 'provider = 3\n'))
 
 
 def test_configured_but_unused_provider_is_reported(tmp_path, capsys):
-    f = write(tmp_path, '[providers.gemini]\nmodel = "m"\n[providers.ollama]\n[lab_guide]\nprovider = "claude-code"\n')
+    f = write(tmp_path, 'provider = "claude-code"\n[providers.gemini]\nmodel = "m"\n[providers.ollama]\n')
     s = Settings.from_env(f)
     assert s.unused_providers() == ["gemini"]                          # empty tables do not count
     assert cli.main(["config", "--config", str(f)]) == 0
     assert "[providers.gemini] is configured but not used" in capsys.readouterr().out
-    used = write(tmp_path, '[providers.gemini]\nmodel = "m"\n[summary]\nprovider = "gemini"\n')
+    used = write(tmp_path, 'provider = "gemini"\n[providers.gemini]\nmodel = "m"\n')
     assert Settings.from_env(used).unused_providers() == []
