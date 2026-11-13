@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .config import DEFAULT_CONFIG, EXAMPLE_CONFIG, ConfigError, Settings
+from .config import DEFAULT_CONFIG, ConfigError, Settings
 from .lessons import DERIVED
 from .obsidian import find_command, open_in_obsidian
 from .llm import make_client
@@ -179,15 +179,8 @@ def _click_test(s: Settings, wait: int = 120) -> int:
 # ---------------------------------------------------------------- config
 def cmd_config(args) -> int:
     if args.init:
-        target = Path(args.config).expanduser() if args.config else DEFAULT_CONFIG
-        if target.exists():
-            print(f"error: {target} already exists (not overwriting)", file=sys.stderr)
-            return 1
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(EXAMPLE_CONFIG.read_text(encoding="utf-8"), encoding="utf-8")
-        target.chmod(0o600)
-        print(f"wrote {target}: edit it, then restart `mathesis serve` (`mathesis doctor` checks it)")
-        return 0
+        from .wizard import run_init
+        return run_init(Path(args.config).expanduser() if args.config else DEFAULT_CONFIG, force=args.force)
     s = _settings(args)
     print(f"config file: {s.config_path or 'none'} (default location: {DEFAULT_CONFIG})")
     for name in s.unused_providers():
@@ -249,7 +242,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     cf = sub.add_parser("config", help="show which config file and LLM providers are in use; --init writes an example")
     cf.add_argument("--config", help="config file to show / to create")
-    cf.add_argument("--init", action="store_true", help=f"write a commented example config ({DEFAULT_CONFIG} unless --config)")
+    cf.add_argument("--init", action="store_true", help=f"ask a few questions and write the config ({DEFAULT_CONFIG} unless --config)")
+    cf.add_argument("--force", action="store_true", help="with --init: replace an existing config file")
     cf.set_defaults(func=cmd_config)
     return p
 

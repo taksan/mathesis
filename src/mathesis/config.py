@@ -1,6 +1,7 @@
 """Settings: built-in defaults < config file (TOML) < MATHESIS_* environment variables < command-line flags.
 
 Config file: --config, else $MATHESIS_CONFIG, else config.toml in the application directory (the checkout; gitignored, optional).
+API keys (GEMINI_API_KEY, ...) come from the environment or from a `.env` file next to the config file (gitignored).
 `mathesis config --init` writes a commented example (src/mathesis/config.example.toml).
 """
 import os
@@ -53,6 +54,29 @@ def find_config(explicit: str | Path | None = None) -> Path | None:
             raise ConfigError(f"config file not found: {path}")
         return path.resolve()
     return DEFAULT_CONFIG if DEFAULT_CONFIG.is_file() else None
+
+
+def load_dotenv(path: Path) -> list[str]:
+    """Put KEY=VALUE lines of a .env file into the environment (variables already set win). Returns the names loaded."""
+    loaded = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return loaded
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.removeprefix("export ").partition("=")
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].rstrip()
+        if key and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
 
 
 def read_config(path: Path) -> dict:
@@ -162,6 +186,7 @@ class Settings:
     @classmethod
     def from_env(cls, config: str | Path | None = None) -> "Settings":
         path = find_config(config)
+        load_dotenv((path.parent if path else DEFAULT_CONFIG.parent) / ".env")  # keys; before anything reads the environment
         raw = read_config(path) if path else {}
         server, summary, lab = raw.get("server", {}), raw.get("summary", {}), raw.get("lab_guide", {})
         tables = dict(raw.get("providers", {}))

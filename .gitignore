@@ -8,6 +8,7 @@ eval/out/
 
 # local configuration
 /config.toml
+/.env
 
 # saved lesson page: contains account ids and the full course page, keep it local only
 archive/sample.html

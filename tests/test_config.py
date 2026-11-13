@@ -87,15 +87,10 @@ def test_explicit_missing_file_is_an_error(tmp_path):
         find_config(tmp_path / "missing.toml")
 
 
-def test_config_command_init_and_show(tmp_path, capsys):
-    target = tmp_path / "sub" / "config.toml"
-    assert cli.main(["config", "--init", "--config", str(target)]) == 0
-    assert target.is_file() and oct(target.stat().st_mode & 0o777) == "0o600"
-    assert cli.main(["config", "--init", "--config", str(target)]) == 1          # never overwrites
-    capsys.readouterr()
-    assert Settings.from_env(target).summary_provider == "ollama"                 # the example parses and is valid
-    assert cli.main(["config", "--config", str(target)]) == 0
-    assert "summaries: ollama" in capsys.readouterr().out
+def test_config_command_shows_the_providers_in_use(tmp_path, capsys):
+    f = write(tmp_path, 'provider = "ollama"\n')
+    assert cli.main(["config", "--config", str(f)]) == 0
+    assert "summaries: ollama [default]" in capsys.readouterr().out
 
 
 def test_cli_reports_config_errors(tmp_path, capsys):
@@ -160,3 +155,16 @@ def test_api_keys_come_from_conventional_environment_variables(tmp_path):
 def test_keys_in_the_file_are_refused_with_the_variable_to_use(tmp_path, line):
     with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
         Settings.from_env(write(tmp_path, f'provider = "gemini"\n[providers.gemini]\n{line}\n'))
+
+
+def test_dotenv_provides_keys_but_never_overrides_the_environment(tmp_path, monkeypatch):
+    f = write(tmp_path, 'provider = "gemini"\n')
+    (tmp_path / ".env").write_text("# keys\nGEMINI_API_KEY='from-file'\nexport MATHESIS_PORT=6123 # note\nOTHER_KEY=\"x y\"\nbad line\n")
+    monkeypatch.setenv("OTHER_KEY", "from-env")
+    for name in ("GEMINI_API_KEY", "MATHESIS_PORT"):
+        monkeypatch.delenv(name, raising=False)
+    s = Settings.from_env(f)
+    import os
+    assert os.environ["GEMINI_API_KEY"] == "from-file" and s.port == 6123 and os.environ["OTHER_KEY"] == "from-env"
+    monkeypatch.delenv("GEMINI_API_KEY")
+    monkeypatch.delenv("MATHESIS_PORT")
