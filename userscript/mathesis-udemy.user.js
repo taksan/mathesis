@@ -4,7 +4,7 @@
 // @version      38.252f127
 // @updateURL    http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
 // @downloadURL  http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
-// @description  Adds a button that saves a Udemy lesson transcript, or the incorrect and marked-for-review questions of a quiz result, to the local Mathesis server (mathesis serve)
+// @description  Adds buttons that save a Udemy lesson transcript, or the incorrect and marked-for-review questions (or all questions) of a quiz result, to the local Mathesis server (mathesis serve)
 // @match        https://www.udemy.com/course/*
 // @grant        none
 // ==/UserScript==
@@ -47,9 +47,10 @@
     return { title: name, base: `${prefix}${normalizeName(name)}` };
   }
 
-  function computePathToWrite() {
+  function computePathToWrite(allQuestions = false) {
     const { base } = lessonFileName();
-    return `${BASE_DIR}/${courseName()}/${base}${isQuizReview() ? ' - incorrect' : ''}.md`;
+    const suffix = !isQuizReview() ? '' : allQuestions ? ' - all questions' : ' - incorrect';
+    return `${BASE_DIR}/${courseName()}/${base}${suffix}.md`;
   }
 
   // ---- transcript ----
@@ -199,17 +200,23 @@
     };
   }
 
-  function formatQuestion(q, unmarked = false) {
+  // plain: for re-taking the quiz: the correct options are shown, but nothing says what you picked or got wrong.
+  function formatQuestion(q, unmarked = false, plain = false) {
     const lines = [`## Question ${q.number}${unmarked ? '*' : ''}`, ''];
     if (q.domain) lines.push(`*Domain: ${q.domain}*`, '');
     lines.push(q.stem, '');
     for (const a of q.answers) {
+      if (plain) {
+        lines.push(`- [${a.correct ? 'x' : ' '}] ${a.text}${a.correct ? ' *(correct answer)*' : ''}`);
+        continue;
+      }
       const note = a.selected && a.correct ? ' *(your answer, correct)*' : a.selected ? ' *(your answer)*' : a.correct ? ' *(correct answer)*' : '';
       lines.push(`- [${a.selected ? 'x' : ' '}] ${a.correct ? '✅' : a.selected ? '❌' : ''} ${a.text}${note}`.replace(/\] {2}/, '] '));
     }
     lines.push('');
-    const shown = q.answers.filter((a) => (a.correct || a.selected) && a.explanation);
-    const others = q.answers.filter((a) => !(a.correct || a.selected) && a.explanation);
+    const isShown = (a) => (plain ? a.correct : a.correct || a.selected);
+    const shown = q.answers.filter((a) => isShown(a) && a.explanation);
+    const others = q.answers.filter((a) => !isShown(a) && a.explanation);
     if (shown.length) lines.push('### Explanation', '', shown.map((a) => a.explanation).join('\n\n'), '');
     if (others.length) lines.push('> [!note]- Why the other options are wrong', quote(others.map((a) => a.explanation).join('\n\n')), '');
     return lines.join('\n');
@@ -264,6 +271,26 @@
     ].join('\n\n') + '\n';
   }
 
+  // "# All questions": every question of the attempt in its original order (the "all" pill), with the explanations,
+  // but without the ❌, "your answer", the Incorrect / To Review split or the * for unmarked wrong answers.
+  async function getAllQuestions() {
+    const all = pills();
+    const everything = all.find((p) => p.name === 'all');
+    const previous = all.find((p) => p.input.checked);
+    let questions, warning = '';
+    try {
+      if (everything && !(await selectPill(everything))) warning = `Could not show exactly the ${everything.count} questions; saved what is on the page. `;
+      questions = statusLabels().map((l) => formatQuestion(parseQuestion(paneOf(l)), false, true));
+    } finally {
+      if (previous && !previous.input.checked) previous.label.click();
+    }
+    if (!questions.length) { alert('No questions found on this page'); return null; }
+    if (warning) alert(warning.trim());
+    const attempt = attemptLabel();
+    return [`# ${lessonFileName().title}`, '', `*${[attempt, `${questions.length} questions`].filter(Boolean).join(' · ')}*`, '',
+      questions.join('\n\n')].join('\n') + '\n';
+  }
+
   // ---- button ----
 
   const style = document.createElement('style');
@@ -282,6 +309,13 @@
       border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
     }
     #open-obsidian-btn:hover { filter: brightness(0.85); }
+    #copy-all-btn {
+      position: fixed; top: 152px; right: 56px; z-index: 2147483647;
+      padding: 10px 15px; background-color: #1a73e8; color: white;
+      border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
+    }
+    #copy-all-btn:hover { filter: brightness(0.85); }
+    #copy-all-btn.saved { background-color: #1e8e3e; }
   `;
   document.head.appendChild(style);
 
@@ -298,8 +332,16 @@
   openButton.textContent = 'Open in Obsidian';
   openButton.style.display = 'none';
   let lessonSaved = false;
+
+  // Third button, quiz results only: every question with its explanations, nothing marking the wrong ones.
+  const allButton = document.createElement('button');
+  allButton.id = 'copy-all-btn';
+  const ALL_LABEL = 'Copy All Questions';
+  allButton.textContent = ALL_LABEL;
+  allButton.style.display = 'none';
   const syncOpenButton = () => {
     openButton.style.display = lessonSaved && button.style.display !== 'none' ? '' : 'none';
+    allButton.style.display = isQuizReview() && button.style.display !== 'none' ? '' : 'none';
   };
   openButton.addEventListener('click', () => {
     let filePath;
@@ -358,9 +400,9 @@
       .catch(() => null);
   }
 
-  button.addEventListener('click', async () => {
-    let kind = isQuizReview() ? 'quiz-review' : 'transcript';
-    let text = await getTranscript();
+  async function copyLesson(allQuestions = false) {
+    let kind = isQuizReview() ? (allQuestions ? 'quiz-all' : 'quiz-review') : 'transcript';
+    let text = allQuestions ? await getAllQuestions() : await getTranscript();
     let filePath;
     if (text === RAW) {
       kind = 'raw';
@@ -370,7 +412,7 @@
       return;
     } else {
       try {
-        filePath = computePathToWrite();
+        filePath = computePathToWrite(allQuestions);
       } catch (e) {
         console.error(e);
         alert('Could not compute file path: ' + e.message);
@@ -393,16 +435,20 @@
       })
       .then((data) => {
         console.log('[Mathesis] saved', data);
-        if (kind !== 'raw') setButtonState('saved', false);
+        if (kind === 'quiz-all') { allButton.classList.add('saved'); allButton.textContent = '✓ All questions saved (copy again)'; }
+        else if (kind !== 'raw') setButtonState('saved', false);
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
-          : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!' : 'Transcript sent successfully!');
+          : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!'
+          : kind === 'quiz-all' ? 'All questions saved!' : 'Transcript sent successfully!');
       })
       .catch(async (error) => {
         console.error('Error:', error);
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
         alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
-  });
+  }
+  button.addEventListener('click', () => copyLesson(false));
+  allButton.addEventListener('click', () => copyLesson(true));
 
   // Double Shift shows/hides the button (remembered per site). Any other key between the two presses cancels it.
   const HIDE_KEY = 'mathesis-button-hidden';
@@ -429,6 +475,7 @@
 
   document.body.appendChild(button);
   document.body.appendChild(openButton);
+  document.body.appendChild(allButton);
   console.log('[Mathesis] Udemy button added');
 
   // Udemy is a single-page app: re-check whenever the lesson changes.
@@ -439,10 +486,14 @@
       lastUrl = location.href;
       lastChecked = null;
       setButtonState('new');
+      allButton.classList.remove('saved');
+      allButton.textContent = ALL_LABEL;
     }
+    syncOpenButton();
     if (lastChecked === null) refreshStatus();
     const root = document.body || document.documentElement; // the site may replace <body>: put the buttons back
     if (!button.isConnected) root.appendChild(button);
     if (!openButton.isConnected) root.appendChild(openButton);
+    if (!allButton.isConnected) root.appendChild(allButton);
   }, 1000);
 })();

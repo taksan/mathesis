@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # files made from a lesson (summary, lab guide, Udemy quiz review and its lessons-to-learn companion), never lessons themselves
-DERIVED = ("-summary.md", "-lab-guide.md", " - incorrect.md", " - lessons to learn.md")
+DERIVED = ("-summary.md", "-lab-guide.md", " - incorrect.md", " - all questions.md", " - lessons to learn.md")
 CACHE = Path("~/.cache/mathesis/embeddings.json").expanduser()
 
 

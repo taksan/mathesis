@@ -49,3 +49,11 @@ def test_embeddings_are_cached_on_disk(tmp_path):
     first = sum(calls)
     lessons.LessonIndex(Counting(), cache_path=tmp_path / "c.json").build(course)
     assert first > 0 and sum(calls) == first        # second build embeds nothing new
+
+
+def test_all_questions_file_is_derived_not_a_lesson(tmp_path):
+    course = tmp_path / "Course"
+    course.mkdir()
+    for name in ("01-Intro.md", "02-Quiz - incorrect.md", "02-Quiz - all questions.md"):
+        (course / name).write_text("x")
+    assert [f.name for f in lessons.lesson_files(course)] == ["01-Intro.md"]
