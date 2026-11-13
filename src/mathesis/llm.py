@@ -24,11 +24,22 @@ from .ollama import OllamaClient
 RETRY_STATUS = (429, 500, 502, 503, 504)  # rate limits and server hiccups (Gemini's free tier rate-limits often)
 
 
+def _error_message(e: urllib.error.HTTPError) -> str:
+    """The server's own explanation from an error body ({"error": {"message": ...}}, possibly in a list), else the raw start."""
+    raw = e.read().decode("utf-8", "replace")
+    try:
+        data = json.loads(raw)
+        data = data[0] if isinstance(data, list) and data else data
+        return str(data["error"]["message"])
+    except (ValueError, KeyError, TypeError, IndexError):
+        return raw.strip()[:200] or e.reason
+
+
 class OpenAIClient:
     def __init__(self, spec: dict, sleep=time.sleep):
         self.name, self.url, self.model = spec["name"], spec["url"].rstrip("/"), spec.get("model")
         self.key_env = spec.get("api_key_env")
-        self.api_key = spec.get("api_key") or (os.environ.get(self.key_env) if self.key_env else None)
+        self.api_key = (spec.get("api_key") or (os.environ.get(self.key_env) if self.key_env else None) or "").strip().strip("'\"") or None
         self.timeout, self.attempts, self._sleep = int(spec.get("timeout", 600)), 4, sleep
 
     @property
@@ -51,8 +62,8 @@ class OpenAIClient:
             with urllib.request.urlopen(req, timeout=15):
                 pass
         except urllib.error.HTTPError as e:
-            if e.code in (401, 403):
-                return False, f"{self.name} rejected the API key (HTTP {e.code})"
+            if e.code in (400, 401, 403):  # Gemini answers an invalid key with 400
+                return False, f"{self.name} rejected the request, probably the API key (HTTP {e.code}): {_error_message(e)}"
             # 404 / 405: a server without a model list is still a server
         except Exception as e:
             return False, f"cannot reach {self.name} at {self.url}: {e}"

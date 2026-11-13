@@ -79,6 +79,26 @@ def test_check_reports_missing_key_bad_key_and_unreachable(monkeypatch):
     assert gemini(monkeypatch).check()[0]
 
 
+def test_gemini_style_400_for_a_bad_key_is_caught_before_any_work(tmp_path, monkeypatch):
+    body = json.dumps([{"error": {"code": 400, "message": "Please pass a valid API key", "status": "INVALID_ARGUMENT"}}])
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda req, timeout=None: (_ for _ in ()).throw(http_error(400, body)))
+    ok, msg = gemini(monkeypatch).check()
+    assert not ok and "Please pass a valid API key" in msg and "k-123" not in msg
+    llm._announced.clear()
+    notes = []
+    monkeypatch.setattr(pipeline, "notify", lambda title, body="", **kw: notes.append(title))
+    monkeypatch.setattr(pipeline, "summarize", lambda *a, **k: pytest.fail("must not run"))
+    lesson = tmp_path / "P" / "C" / "01-L.md"
+    lesson.parent.mkdir(parents=True)
+    pipeline.write_summary("t", lesson, Settings(root=tmp_path, summary_provider="gemini"))
+    assert notes == ["Saved without summary"]
+
+
+def test_key_whitespace_and_quotes_are_stripped(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", ' "k-123"\n')
+    assert OpenAIClient(Settings().provider_spec("gemini")).api_key == "k-123"
+
+
 def test_local_openai_server_needs_no_key():
     s = Settings(providers={"lmstudio": {"type": "openai", "url": "http://localhost:1234/v1", "model": "m"}},
                  summary_provider="lmstudio")
