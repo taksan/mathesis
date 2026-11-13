@@ -158,3 +158,22 @@ def test_summary_goes_through_the_configured_provider(tmp_path, monkeypatch):
     lesson.parent.mkdir(parents=True)
     pipeline.write_summary("text", lesson, Settings(root=tmp_path, pipeline="single"))
     assert "model=gemini:g-1" in lesson.with_name("01-L-summary.md").read_text() and calls
+
+
+def test_startup_complains_once_when_the_key_is_missing(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from mathesis import server
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    notes = []
+    monkeypatch.setattr(server, "notify", lambda title, body="", **kw: notes.append((title, body, kw.get("error"))))
+    settings = Settings(root=tmp_path.resolve(), notify=False, default_provider="gemini",
+                        summary_provider="gemini", lab_provider="gemini")
+    with TestClient(server.create_app(settings)):
+        pass
+    assert len(notes) == 1 and notes[0][2] is True and "GEMINI_API_KEY" in notes[0][1]      # summaries and lab guides share it
+    notes.clear()
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda req, timeout=None: Resp(b"{}"))
+    with TestClient(server.create_app(settings)):
+        pass
+    assert notes == []

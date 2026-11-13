@@ -1,5 +1,5 @@
 # Mathesis configuration. `mathesis config --init` writes this file as config.toml in the application directory
-# (gitignored: it may hold an API key). Keep what you change; every key is optional.
+# (gitignored). Keep what you change; every key is optional. API keys are NOT set here: see [providers.gemini].
 # Precedence: this file < MATHESIS_* environment variables < command-line flags.
 # Restart `mathesis serve` after editing. `mathesis config` shows what is in effect, `mathesis doctor` tests it.
 #
@@ -49,17 +49,17 @@
 # timeout = 900
 
 [providers.gemini]                      # Gemini through its OpenAI-compatible endpoint
-# api_key_env = "GEMINI_API_KEY"        # NAME of the environment variable holding the key (preferred)
-# api_key = "..."                       # or the key itself (then: chmod 600 this file)
+# API KEY: export GEMINI_API_KEY=... in the shell that starts `mathesis serve` (never put keys in this file;
+# the server complains at startup if the variable is missing).
 # model = "gemini-3.8-flash"            # default; any model your key can use (2.5 models are deprecated)
 # timeout = 600
 
-# Any OpenAI-compatible server: OpenAI, OpenRouter, LM Studio, vLLM, llama.cpp... pick a name, then
-# use it as `provider = "<name>"` above.
+# Any OpenAI-compatible server: OpenAI (built in; key in OPENAI_API_KEY), OpenRouter, LM Studio, vLLM, llama.cpp...
+# pick a name, then use it as `provider = "<name>"` above. If it needs a key, export <NAME>_API_KEY (here:
+# OPENROUTER_API_KEY); local servers need none.
 # [providers.openrouter]
 # type = "openai"
 # url = "https://openrouter.ai/api/v1"
-# api_key_env = "OPENROUTER_API_KEY"
 # model = "google/gemini-3.8-flash"     # check OpenRouter's model list for the exact id
 #
 # A second Ollama (another machine / model):

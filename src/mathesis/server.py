@@ -48,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for name in settings.unused_providers():
             print(f"WARNING: [providers.{name}] is set in the config but is not the default provider nor a job's "
                   f"override, so it is not used (provider = \"{name}\" at the top of the file selects it)")
+        complained = set()
         for role, enabled, what in [("summary", settings.summary_enabled, "Summaries"),
                                     ("lab_guide", settings.lab_guide_enabled, "Lab guides")]:
             if not enabled:
@@ -57,8 +58,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ok, message = await run_in_threadpool(client.check)
             print(f"{what} ({client.label}): " + (message if ok else
                   f"WARNING: {message}. Lessons are still saved; {what.lower()} are skipped until it is reachable."))
-            if not ok and role == "summary":
-                notify("Mathesis: summaries unavailable", message, enabled=settings.notify)
+            if not ok and message not in complained:  # one notification per distinct problem, not one per job
+                complained.add(message)
+                notify("Mathesis: provider not usable", message, error=True, enabled=settings.notify)
         yield
 
     app = FastAPI(title="Mathesis", lifespan=lifespan)

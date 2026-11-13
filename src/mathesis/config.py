@@ -4,7 +4,6 @@ Config file: --config, else $MATHESIS_CONFIG, else config.toml in the applicatio
 `mathesis config --init` writes a commented example (src/mathesis/config.example.toml).
 """
 import os
-import stat
 import tempfile
 import tomllib
 from dataclasses import dataclass, field
@@ -22,8 +21,8 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai"  # Gemini
 BUILTIN_PROVIDERS = {
     "ollama": {"type": "ollama"},
     "claude-code": {"type": "claude-code"},
-    "gemini": {"type": "openai", "url": GEMINI_URL, "api_key_env": "GEMINI_API_KEY", "model": "gemini-3.8-flash"},
-    "openai": {"type": "openai", "url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY"},
+    "gemini": {"type": "openai", "url": GEMINI_URL, "model": "gemini-3.8-flash", "key_required": True},
+    "openai": {"type": "openai", "url": "https://api.openai.com/v1", "key_required": True},
 }
 PROVIDER_TYPES = ("ollama", "openai", "claude-code")
 
@@ -33,6 +32,12 @@ KNOWN_KEYS = {
     "summary": {"enabled", "provider", "model", "pipeline", "max_revisions"},
     "lab_guide": {"enabled", "provider", "model"},
 }
+
+
+def api_key_env(provider: str) -> str:
+    """The environment variable that holds a provider's API key: GEMINI_API_KEY, OPENAI_API_KEY, <NAME>_API_KEY.
+    Keys are never read from the config file, so the file can be shared or committed safely."""
+    return provider.upper().replace("-", "_") + "_API_KEY"
 
 
 class ConfigError(ValueError):
@@ -70,8 +75,6 @@ def read_config(path: Path) -> dict:
                               f"(known: {', '.join(sorted(KNOWN_KEYS[section]))})")
     if not isinstance(raw.get("providers", {}), dict) or not all(isinstance(t, dict) for t in raw.get("providers", {}).values()):
         raise ConfigError(f"{path}: [providers.<name>] must be tables")
-    if any("api_key" in t for t in raw.get("providers", {}).values()) and path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-        print(f"warning: {path} holds an api_key and is readable by other users (chmod 600 it, or use api_key_env)")
     return raw
 
 
@@ -122,6 +125,10 @@ class Settings:
         """Everything needed to build the client of provider `name` (built-in defaults < settings < config tables)."""
         spec = dict(BUILTIN_PROVIDERS.get(name, {}))
         spec.update(self.providers.get(name, {}))
+        for gone in ("api_key", "api_key_env"):
+            if gone in spec:
+                raise ConfigError(f"[providers.{name}] {gone} is not a setting any more: export the key as "
+                                  f"{api_key_env(name)} in the environment of the server")
         kind = spec.get("type")
         if kind not in PROVIDER_TYPES:
             raise ConfigError(f"provider {name!r} is not defined: use ollama, claude-code, gemini, openai or add "
@@ -136,6 +143,8 @@ class Settings:
             spec.setdefault("timeout", self.claude_timeout)
         elif not spec.get("url"):
             raise ConfigError(f"provider {name!r} needs a url")
+        else:
+            spec["api_key_env"] = api_key_env(name)
         if model:
             spec["model"] = model
         spec["name"] = name

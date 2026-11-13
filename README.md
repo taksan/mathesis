@@ -80,13 +80,13 @@ provider = "gemini"            # the one provider: ollama | gemini | openai | cl
 [lab_guide]
 # provider = "claude-code"
 
-[providers.gemini]             # details of a provider (url, model, key); only used when it is selected above
-api_key_env = "GEMINI_API_KEY" # NAME of the environment variable that holds the key
+[providers.gemini]             # details of a provider (url, model); only used when it is selected above
+# model = "gemini-3.8-flash"
 ```
 
 Without a `provider` line the original behavior stays: Ollama for summaries, Claude Code for lab guides. `mathesis config` shows the provider each job ends up with (`[default]` or `[override]`) and warns about a configured provider nothing uses.
 
-Export the key in the environment of the server (`export GEMINI_API_KEY=...`). `api_key = "..."` in the file also works (keep it `chmod 600`; `mathesis config --init` does that). Gemini is reached through its OpenAI-compatible endpoint, so any other OpenAI-style server works the same way: add `[providers.<name>]` with `type = "openai"`, `url`, `model` (and `api_key_env` if it needs a key), e.g. OpenRouter, LM Studio, vLLM. Rate-limit answers (HTTP 429/5xx) are retried with a pause. The default Gemini model is `gemini-3.8-flash` (the 2.5 models are deprecated); change `model` for another one, since Google renames models often.
+**API keys are never put in the config file.** Export `GEMINI_API_KEY` in the shell that starts `mathesis serve` (`OPENAI_API_KEY` for `openai`, `<NAME>_API_KEY` for a provider you define, e.g. `OPENROUTER_API_KEY`). The server checks it at startup and complains (log line plus desktop notification) if it is missing; `mathesis config` and `mathesis doctor` show whether it is set. Gemini is reached through its OpenAI-compatible endpoint, so any other OpenAI-style server works the same way: add `[providers.<name>]` with `type = "openai"`, `url`, `model` (export `<NAME>_API_KEY` if it needs a key), e.g. OpenRouter, LM Studio, vLLM. Rate-limit answers (HTTP 429/5xx) are retried with a pause. The default Gemini model is `gemini-3.8-flash` (the 2.5 models are deprecated); change `model` for another one, since Google renames models often.
 
 **Fallback.** If the chosen backend is down, unreachable, has no key or (Claude Code) is not installed, the lesson or lab is saved anyway and only the summary / lab guide is skipped, with one desktop notification per outage ("Saved without summary"). The backend is checked again on every save, so starting Ollama later is enough. `provider = "none"` (or `--no-summary`) switches a job off on purpose.
 

@@ -63,7 +63,6 @@ provider = "openrouter"
 [providers.openrouter]
 type = "openai"
 url = "https://openrouter.ai/api/v1"
-api_key_env = "OPENROUTER_API_KEY"
 model = "google/gemini-2.5-flash"
 ''')
     spec = Settings.from_env(f).provider_spec("openrouter")
@@ -144,3 +143,20 @@ def test_configured_but_unused_provider_is_reported(tmp_path, capsys):
     assert "[providers.gemini] is configured but not used" in capsys.readouterr().out
     used = write(tmp_path, 'provider = "gemini"\n[providers.gemini]\nmodel = "m"\n')
     assert Settings.from_env(used).unused_providers() == []
+
+
+def test_api_keys_come_from_conventional_environment_variables(tmp_path):
+    from mathesis.config import api_key_env
+    assert (api_key_env("gemini"), api_key_env("openai"), api_key_env("big-router")) == (
+        "GEMINI_API_KEY", "OPENAI_API_KEY", "BIG_ROUTER_API_KEY")
+    s = Settings()
+    assert s.provider_spec("gemini")["api_key_env"] == "GEMINI_API_KEY" and s.provider_spec("gemini")["key_required"]
+    custom = Settings(providers={"openrouter": {"type": "openai", "url": "http://x/v1"}})
+    spec = custom.provider_spec("openrouter")
+    assert spec["api_key_env"] == "OPENROUTER_API_KEY" and not spec.get("key_required")
+
+
+@pytest.mark.parametrize("line", ['api_key = "k"', 'api_key_env = "MY_KEY"'])
+def test_keys_in_the_file_are_refused_with_the_variable_to_use(tmp_path, line):
+    with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
+        Settings.from_env(write(tmp_path, f'provider = "gemini"\n[providers.gemini]\n{line}\n'))

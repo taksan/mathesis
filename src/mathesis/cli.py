@@ -198,8 +198,11 @@ def cmd_config(args) -> int:
             print(f"{what}: off")
             continue
         spec = s.provider_spec(provider, model)
-        shown = {k: v for k, v in spec.items() if k not in ("api_key", "name") and v is not None}
-        key = " (api_key set in file)" if spec.get("api_key") else ""
+        shown = {k: v for k, v in spec.items() if k not in ("name", "key_required") and v is not None}
+        key = ""
+        if spec.get("api_key_env"):
+            key = f" | key ${spec['api_key_env']}: " + ("set" if os.environ.get(spec["api_key_env"]) else
+                                                       ("NOT SET" if spec.get("key_required") else "not set (optional)"))
         note = "" if s.default_provider is None else (" [default]" if provider == s.default_provider else " [override]")
         print(f"{what}: {provider}{note} {shown}{key}")
     return 0

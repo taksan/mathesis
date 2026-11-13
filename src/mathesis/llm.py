@@ -38,8 +38,8 @@ def _error_message(e: urllib.error.HTTPError) -> str:
 class OpenAIClient:
     def __init__(self, spec: dict, sleep=time.sleep):
         self.name, self.url, self.model = spec["name"], spec["url"].rstrip("/"), spec.get("model")
-        self.key_env = spec.get("api_key_env")
-        self.api_key = (spec.get("api_key") or (os.environ.get(self.key_env) if self.key_env else None) or "").strip().strip("'\"") or None
+        self.key_env, self.key_required = spec["api_key_env"], bool(spec.get("key_required"))
+        self.api_key = os.environ.get(self.key_env, "").strip().strip("'\"") or None  # only from the environment
         self.timeout, self.attempts, self._sleep = int(spec.get("timeout", 600)), 4, sleep
 
     @property
@@ -55,8 +55,9 @@ class OpenAIClient:
     def check(self) -> tuple[bool, str]:
         if not self.model:
             return False, f"provider {self.name}: no model set (model = \"...\" in its [providers.{self.name}] table)"
-        if self.key_env and not self.api_key:
-            return False, f"provider {self.name}: environment variable {self.key_env} is not set"
+        if self.key_required and not self.api_key:
+            return False, (f"the API key is missing: export {self.key_env}=... in the shell that starts the server "
+                           f"(provider {self.name})")
         try:
             req = urllib.request.Request(f"{self.url}/models", headers=self._headers())
             with urllib.request.urlopen(req, timeout=15):
