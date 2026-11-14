@@ -321,13 +321,34 @@
     };
   }
 
+  // The exam's time limit. Udemy's results page has no field for it, but course descriptions often say it in a sentence
+  // such as "50-60 multiple-choice questions in 2 hours" or "Time limit: 90 minutes". Only text outside the questions is
+  // searched. Returns { minutes, text } or null when the page does not say.
+  function examTimeLimit() {
+    let text = document.body.textContent;
+    for (const label of statusLabels()) text = text.split(paneOf(label).textContent).join(' '); // not the questions' own text
+    text = text.replace(/\s+/g, ' ');
+    const patterns = [
+      /\d+(?:\s*[-–]\s*\d+)?\s+(?:multiple[- ]choice\s+)?questions?\s+in\s+(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|minutes?|mins?)\b/i,
+      /(?:time limit|time allowed|duration)\s*[:\-–]?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|minutes?|mins?)\b/i,
+    ];
+    for (const re of patterns) {
+      const m = text.match(re);
+      if (m) return { minutes: Math.round(parseFloat(m[1].replace(',', '.')) * (/^h/i.test(m[2]) ? 60 : 1)), text: m[0] };
+    }
+    return null;
+  }
+
   async function getQuizJson() {
     const questions = await collectAllQuestions();
     if (!questions) return null;
+    const limit = examTimeLimit();
     return JSON.stringify({
       title: lessonFileName().title,
       attempt: attemptLabel(),
       source: location.href,
+      timeLimitMinutes: limit ? limit.minutes : null,
+      timeLimitText: limit ? limit.text : '',
       questions: questions.map(questionToJson),
     }, null, 2) + '\n';
   }

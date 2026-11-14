@@ -2,6 +2,8 @@
   "title": "Sample Practice Test",
   "attempt": "Attempt 1",
   "source": "https://www.udemy.com/course/sample-course/learn/quiz/1/result/1",
+  "timeLimitMinutes": null,
+  "timeLimitText": "",
   "questions": [
     {
       "number": 1,

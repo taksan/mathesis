@@ -71,6 +71,11 @@ def test_multi_must_have_at_least_two_correct_options(sample):
 
 @pytest.mark.parametrize("change", [
     lambda d: d.pop("title"),
+    lambda d: d.pop("timeLimitMinutes"),
+    lambda d: d.update(timeLimitMinutes=0),
+    lambda d: d.update(timeLimitMinutes="2 hours"),
+    lambda d: d.update(timeLimitMinutes=1.5),
+    lambda d: d.update(timeLimitText=None),
     lambda d: d.update(questions=[]),
     lambda d: d.update(extra=1),
     lambda d: d["questions"][0].update(type="maybe"),
@@ -82,7 +87,7 @@ def test_multi_must_have_at_least_two_correct_options(sample):
     lambda d: d["questions"][0]["options"][0].update(text=""),
     lambda d: d["questions"][0]["options"][0].pop("explanation"),
     lambda d: d["questions"][0]["options"][0].update(selected=True),  # what you picked is deliberately not exported
-], ids=["no-title", "no-questions", "extra-key", "bad-type", "no-explanation", "empty-question", "number-zero",
+], ids=["no-title", "no-time-limit", "time-limit-zero", "time-limit-text", "time-limit-fraction", "time-limit-text-null", "no-questions", "extra-key", "bad-type", "no-explanation", "empty-question", "number-zero",
         "one-option", "correct-not-bool", "empty-option", "no-option-explanation", "selected-not-allowed"])
 def test_invalid_documents_are_rejected(sample, change):
     change(sample)
@@ -92,3 +97,10 @@ def test_invalid_documents_are_rejected(sample, change):
 def test_unknown_question_number_is_allowed(sample):
     sample["questions"][0]["number"] = None
     assert errors(sample) == []
+
+
+def test_time_limit_is_minutes_or_null_with_its_source_text():
+    overall = load(ROOT / "tests" / "fixtures" / "quiz-overall-explanation.json")
+    per_option = load(ROOT / "tests" / "fixtures" / "quiz-option-explanations.json")
+    assert overall["timeLimitMinutes"] == 120 and "2 hours" in overall["timeLimitText"]
+    assert per_option["timeLimitMinutes"] is None and per_option["timeLimitText"] == ""
