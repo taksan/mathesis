@@ -390,11 +390,16 @@
     openButton.style.display = lessonSaved && panel.style.display !== 'none' ? '' : 'none';
     allButton.style.display = isQuizReview() && panel.style.display !== 'none' ? '' : 'none';
   };
+  const statusOf = (filePath) => fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } }).then((r) => r.json());
   openButton.addEventListener('click', () => {
-    let filePath;
-    try { filePath = computePathToWrite(); } catch (e) { return; }
-    fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
-      .then((r) => r.json())
+    let filePath, paths;
+    try { paths = isQuizReview() ? [computePathToWrite(false), computePathToWrite(true)] : [computePathToWrite()]; } catch (e) { return; }
+    // the first of this page's files that is saved (quiz results: incorrect first, then all questions)
+    Promise.all(paths.map((p) => statusOf(p))).then((all) => {
+      const i = all.findIndex((d) => d.exists);
+      filePath = paths[i < 0 ? 0 : i];
+      return all[i < 0 ? 0 : i];
+    })
       .then((d) => {
         if (d.obsidian_uri) window.location.href = d.obsidian_uri;
         else if (d.exists) { // Obsidian is not installed: the server opens the file in a text editor
@@ -405,14 +410,23 @@
       .catch((error) => alert('Could not reach the Mathesis server: ' + error));
   });
 
+  // Quiz results have two files (incorrect + to review, all questions): each button knows its own, and the panel
+  // is "saved" when either exists.
+  let allSaved = false, lastState = 'new', lastSummary = false;
   function setButtonState(state, summaryDone) {
-    lessonSaved = state === 'saved';
+    lastState = state; lastSummary = summaryDone;
+    const review = isQuizReview();
+    const anySaved = state === 'saved' || (review && allSaved);
+    lessonSaved = anySaved;
     syncOpenButton();
-    panel.classList.toggle('saved', state === 'saved');
+    panel.classList.toggle('saved', anySaved);
     panel.classList.toggle('unknown', state === 'unknown');
     button.textContent = state === 'saved' ? 'Copy again' : LABEL();
-    statusEl.textContent = state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` :
-      state === 'unknown' ? 'Server offline' : 'Not saved yet';
+    allButton.classList.toggle('saved', review && allSaved);
+    allButton.textContent = review && allSaved ? '✓ All questions saved' : ALL_LABEL;
+    statusEl.textContent = state === 'unknown' ? 'Server offline' :
+      review ? `Incorrect: ${state === 'saved' ? 'saved' : 'not saved'} · All: ${allSaved ? 'saved' : 'not saved'}` :
+      state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` : 'Not saved yet';
   }
 
   let lastChecked = null;
@@ -420,11 +434,13 @@
     let filePath;
     try { filePath = computePathToWrite(); } catch (e) { return; } // page still loading; retried below
     lastChecked = filePath;
-    fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
-      .then((r) => r.json())
-      .then((d) => {
+    const review = isQuizReview();
+    Promise.all([statusOf(filePath), review ? statusOf(computePathToWrite(true)) : null])
+      .then(([d, all]) => {
+        if (lastChecked !== filePath) return;
         openButton.textContent = d.opener === 'editor' ? 'Open in editor' : 'Open in Obsidian';
-        if (lastChecked === filePath) setButtonState(d.exists ? 'saved' : 'new', d.summary_exists);
+        allSaved = !!(all && all.exists);
+        setButtonState(d.exists ? 'saved' : 'new', d.summary_exists);
       })
       .catch(() => {
         // The server may just be busy or restarting (or the request was cut by a navigation): show it, then check again
@@ -487,7 +503,7 @@
       })
       .then((data) => {
         console.log('[Mathesis] saved', data);
-        if (kind === 'quiz-all') { allButton.classList.add('saved'); allButton.textContent = '✓ All questions saved'; }
+        if (kind === 'quiz-all') { allSaved = true; setButtonState(lastState, lastSummary); }
         else if (kind !== 'raw') setButtonState('saved', false);
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!'
@@ -555,9 +571,8 @@
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       lastChecked = null;
+      allSaved = false;
       setButtonState('new');
-      allButton.classList.remove('saved');
-      allButton.textContent = ALL_LABEL;
     }
     syncOpenButton();
     if (lastChecked === null) refreshStatus();
