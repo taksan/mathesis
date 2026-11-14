@@ -44,13 +44,15 @@
     const name = m ? m[2].trim() : title;
     const width = Math.max(String(all.length).length, number.length, 2);
     const prefix = number === '0' ? '' : number.padStart(width, '0') + '-';
-    return { title: name, base: `${prefix}${normalizeName(name)}` };
+    return { title: name, prefix, base: `${prefix}${normalizeName(name)}` };
   }
 
   function computePathToWrite(allQuestions = false) {
-    const { base } = lessonFileName();
-    const suffix = !isQuizReview() ? '' : allQuestions ? ' - all questions' : ' - incorrect';
-    return `${BASE_DIR}/${courseName()}/${base}${suffix}.md`;
+    const { base, prefix } = lessonFileName();
+    // Quiz results: the folder already names the course and the tests are numbered, so the file is just "NN-incorrect.md"
+    // (or "NN-all questions.md"), not "NN-<verbose quiz title> - incorrect.md".
+    if (isQuizReview()) return `${BASE_DIR}/${courseName()}/${prefix}${allQuestions ? 'all questions' : 'incorrect'}.md`;
+    return `${BASE_DIR}/${courseName()}/${base}.md`;
   }
 
   // ---- transcript ----
