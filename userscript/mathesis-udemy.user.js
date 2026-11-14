@@ -641,8 +641,8 @@
       .catch(() => null);
   }
 
-  // Saving a quiz result that is already saved: ask whether to overwrite it or keep it and save this one as another
-  // attempt ("NN-all questions (attempt 2).md"). Resolves to 'overwrite', 'keep' or 'cancel'.
+  // Saving the Incorrect + To Review file when it is already saved: ask whether to overwrite it or keep it and save this one
+  // as another attempt ("NN-incorrect (attempt 2).md"). Resolves to 'overwrite', 'keep' or 'cancel'.
   function askOverwriteOrKeep(existingName, newName) {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
@@ -675,7 +675,7 @@
     });
   }
 
-  // "Udemy/Course/02-all questions.md" -> "Udemy/Course/02-all questions (attempt 3).md"
+  // "Udemy/Course/02-incorrect.md" -> "Udemy/Course/02-incorrect (attempt 3).md"
   const withAttempt = (path, n) => path.replace(/(\.[a-z]+)$/i, ` (attempt ${n})$1`);
 
   // The path to save a quiz result to: the given one when it is free, otherwise whatever the person chooses.
@@ -714,7 +714,9 @@
       }
     }
 
-    if (isQuizReview() && kind !== 'raw') { // a quiz saved a second time: overwrite, or keep both as another attempt
+    // Incorrect + To Review depends on the attempt, so saving it again asks: overwrite, or keep both as another attempt.
+    // "All questions" (Markdown and JSON) is the same whatever the attempt, so it is simply overwritten.
+    if (kind === 'quiz-review') {
       filePath = await chooseTarget(filePath);
       if (!filePath) return;
     }
@@ -766,8 +768,6 @@
       alert('Could not compute file path: ' + e.message);
       return;
     }
-    filePath = await chooseTarget(filePath);
-    if (!filePath) return;
     try {
       const response = await fetch(`${SERVER}/write`, {
         method: 'POST',
