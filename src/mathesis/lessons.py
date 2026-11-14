@@ -9,7 +9,8 @@ from pathlib import Path
 # files made from a lesson (summary, lab guide, Udemy quiz review and its lessons-to-learn companion), never lessons themselves
 # Files made from a lesson, not lessons themselves. Quiz results are named "NN-incorrect.md" / "NN-all questions.md" (the
 # older "NN-<title> - incorrect.md" form is still recognised), and the companion "NN-lessons to learn.md".
-DERIVED = ("-summary.md", "-lab-guide.md", "-incorrect.md", "-all questions.md", "-lessons to learn.md")
+DERIVED = ("-summary.md", "-lab-guide.md", "-incorrect.md", "-all questions.md", "-lessons to learn.md",
+           " - incorrect.md", " - all questions.md", " - lessons to learn.md")
 CACHE = Path("~/.cache/mathesis/embeddings.json").expanduser()
 
 
