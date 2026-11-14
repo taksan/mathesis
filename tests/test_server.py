@@ -9,7 +9,7 @@ from mathesis.pipeline import summary_path
 
 @pytest.fixture
 def client(tmp_path):
-    settings = Settings(root=tmp_path.resolve(), summarize=False, notify=False)
+    settings = Settings(root=tmp_path.resolve(), summarize=False, notify=False, obsidian_command="obs")  # "obs": Obsidian found
     with TestClient(server.create_app(settings)) as c:
         c.root = tmp_path.resolve()
         yield c
@@ -18,7 +18,7 @@ def client(tmp_path):
 def test_write_creates_missing_directories_and_status_reflects_it(client):
     target = client.root / "Path" / "Course" / "01-Lesson.md"
     h = {"X-File-Path": "Path/Course/01-Lesson.md"}
-    assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False, "obsidian_uri": None}
+    assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False, "opener": "obsidian", "obsidian_uri": None}
     r = client.post("/write", content="# Lesson\nhello".encode(), headers=h)
     assert r.status_code == 200 and r.json()["bytes"] == 14 and r.json()["path"] == "Path/Course/01-Lesson.md"
     assert target.read_text() == "# Lesson\nhello"
@@ -192,3 +192,24 @@ def test_reports_keep_only_the_newest(tmp_path, monkeypatch):
         monkeypatch.setattr(reports.secrets, "token_hex", lambda n, i=i: f"{i:04x}")
         made.append(store.create({"error": str(i)}))
     assert store.ids() == sorted(set(made), reverse=True)[:3]
+
+
+def test_without_obsidian_status_says_editor_and_open_uses_the_editor(tmp_path, monkeypatch):
+    from mathesis import obsidian
+    monkeypatch.setattr(obsidian, "APPIMAGE_DIRS", [])
+    monkeypatch.setattr(obsidian.shutil, "which", lambda name: None)
+    opened = []
+    from types import SimpleNamespace  # only obsidian.py sees the fake: the server's own git/version calls stay real
+    monkeypatch.setattr(obsidian, "subprocess", SimpleNamespace(Popen=lambda cmd, **kw: opened.append(cmd), DEVNULL=-3))
+    settings = Settings(root=tmp_path.resolve(), summarize=False, notify=False, editor_command="ed")
+    with TestClient(server.create_app(settings)) as c:
+        h = {"X-File-Path": "P/C/01-L.md"}
+        assert c.post("/open", headers=h).status_code == 404                # not saved yet
+        c.post("/write", content=b"x", headers={**h, "X-Mathesis-Kind": "quiz"})
+        status = c.get("/status", headers=h).json()
+        assert status["exists"] and status["opener"] == "editor" and status["obsidian_uri"] is None
+        r = c.post("/open", headers=h)
+        assert r.json()["opened_with"] == "text editor" and opened == [["ed", str(tmp_path.resolve() / "P/C/01-L.md")]]
+    import dataclasses
+    with TestClient(server.create_app(dataclasses.replace(settings, editor_command=None))) as c:
+        assert c.post("/open", headers={"X-File-Path": "P/C/01-L.md"}).status_code == 501  # no editor at all

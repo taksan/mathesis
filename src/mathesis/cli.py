@@ -10,7 +10,7 @@ from pathlib import Path
 from . import __version__
 from .config import DEFAULT_CONFIG, ConfigError, Settings
 from .lessons import DERIVED
-from .obsidian import find_command, open_in_obsidian
+from .obsidian import editor_command, find_command, open_note, opener_name
 from .llm import make_client
 from .pipeline import PROMPT_DIR, render, summarize, summary_path
 
@@ -143,8 +143,12 @@ def cmd_doctor(args) -> int:
     missing_lab = (PROMPT_DIR / "lab_guide.txt").is_file()
     report(missing_lab, "lab guide prompt " + ("found" if missing_lab else "missing"))
     opener = find_command(s.obsidian_command)
-    report(True if opener else None, "Obsidian opener: " + (" ".join(opener) if opener else
-           "not found (notification click will not open Obsidian; set MATHESIS_OBSIDIAN)"))
+    editor = editor_command(s.editor_command)
+    if opener:
+        report(True, "Obsidian opener: " + " ".join(opener))
+    else:
+        report(True if editor else None, "Obsidian not found: notes open in a text editor (" +
+               (" ".join(editor) if editor else "none found either: set MATHESIS_EDITOR") + ")")
     with socket.socket() as sock:
         sock.settimeout(0.5)
         busy = sock.connect_ex((s.host, s.port)) == 0
@@ -168,10 +172,11 @@ def _click_test(s: Settings, wait: int = 120) -> int:
 
     def on_click():
         clicked.append(True)
-        print(f"clicked: opening {target.name} in Obsidian ->", "ok" if open_in_obsidian(target, s.obsidian_command) else "FAILED")
+        print(f"clicked: opening {target.name} ->", open_note(target, s) or "FAILED")
 
-    print(f"click test: a notification appeared; click it (or its button) within {wait}s to open {target.name} in Obsidian ...")
-    thread = notify("Mathesis test: click me", f"Opens {target.name} in Obsidian", on_click=on_click, enabled=s.notify)
+    print(f"click test: a notification appeared; click it (or its button) within {wait}s to open {target.name} in {opener_name(s)} ...")
+    thread = notify("Mathesis test: click me", f"Opens {target.name} in {opener_name(s)}", on_click=on_click, enabled=s.notify,
+                    action_label=f"Open in {opener_name(s)}")
     if thread:
         thread.join(wait)
     if not clicked:
@@ -223,7 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--no-summary", action="store_true", help="only save transcripts, no summaries")
     sv.add_argument("--no-lab-guide", dest="no_lab_guide", action="store_true", help="labs: no gcloud/terraform guide")
     sv.add_argument("--no-notify", action="store_true", help="no desktop notifications")
-    sv.add_argument("--no-open", dest="no_open", action="store_true", help="notification click does not open Obsidian")
+    sv.add_argument("--no-open", dest="no_open", action="store_true", help="notification click does not open the note")
     sv.add_argument("--single", action="store_true", help="one-call pipeline with the original prompt")
     sv.set_defaults(func=cmd_serve)
 

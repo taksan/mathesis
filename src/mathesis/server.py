@@ -3,8 +3,9 @@
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
-GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "obsidian_uri": str | null}
-              (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist)
+GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
+POST /open    Header X-File-Path: opens the summary (or the lesson) in a text editor on the server machine (used when Obsidian is missing)
+              (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist or Obsidian is not installed)
 POST /reports  JSON {url, title, kind, path, status, error, html, body, ...} -> {"id"}: an error report the userscript uploads when a save fails
 GET  /reports  list of reports (newest first); /reports/<id> one report's details; /reports/<id>/html the page; /reports/<id>/body what was sent
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
@@ -27,7 +28,7 @@ from .config import Settings
 from .labguide import write_lab_guide
 from .notify import notify
 from .llm import make_client
-from .obsidian import uri_for
+from .obsidian import editor_command, find_command, have_obsidian, open_note, uri_for
 from .reports import ReportStore
 from .pipeline import summary_path, write_summary
 from .userscripts import list_scripts, render_page
@@ -50,6 +51,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print(f"Mathesis listening on http://{settings.host}:{settings.port}  (writing under {settings.root})")
         if settings.config_path:
             print(f"config: {settings.config_path}")
+        if find_command(settings.obsidian_command):
+            print("notes open in: Obsidian")
+        else:
+            editor = editor_command(settings.editor_command)
+            print("Obsidian not found: notes open in a text editor (" + (" ".join(editor) if editor else
+                  "NONE found: set MATHESIS_EDITOR") + ")")
         for name in settings.unused_providers():
             print(f"WARNING: [providers.{name}] is set in the config but is not the default provider nor a job's "
                   f"override, so it is not used (provider = \"{name}\" at the top of the file selects it)")
@@ -147,8 +154,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Was this lesson already saved?"""
         target = target_path(x_file_path)
         exists, summary = target.is_file(), summary_path(target)
-        return {"exists": exists, "summary_exists": summary.is_file(),
-                "obsidian_uri": uri_for(summary if summary.is_file() else target) if exists else None}
+        obsidian = have_obsidian(settings)
+        return {"exists": exists, "summary_exists": summary.is_file(), "opener": "obsidian" if obsidian else "editor",
+                "obsidian_uri": uri_for(summary if summary.is_file() else target) if exists and obsidian else None}
+
+    @app.post("/open")
+    def open_file(x_file_path: str | None = Header(None)):
+        """Open the summary (or the lesson) in a text editor: what the userscript's button does when Obsidian is missing."""
+        target = target_path(x_file_path)
+        if not target.is_file():
+            raise ApiError(404, "this lesson is not saved yet")
+        shown = summary_path(target) if summary_path(target).is_file() else target
+        used = open_note(shown, settings)
+        if not used:
+            raise ApiError(501, "no text editor found on the server machine: set MATHESIS_EDITOR")
+        return {"opened_with": used, "path": str(shown)}
 
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),

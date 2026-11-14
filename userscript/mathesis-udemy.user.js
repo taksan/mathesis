@@ -356,7 +356,10 @@
       .then((r) => r.json())
       .then((d) => {
         if (d.obsidian_uri) window.location.href = d.obsidian_uri;
-        else alert('This lesson is not saved yet');
+        else if (d.exists) { // Obsidian is not installed: the server opens the file in a text editor
+          return fetch(`${SERVER}/open`, { method: 'POST', headers: { 'X-File-Path': encodeURIComponent(filePath) } })
+            .then((r) => r.json().then((j) => { if (!r.ok) alert(j.error || 'Could not open the file'); }));
+        } else alert('This lesson is not saved yet');
       })
       .catch((error) => alert('Could not reach the Mathesis server: ' + error));
   });
@@ -379,7 +382,10 @@
     lastChecked = filePath;
     fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
       .then((r) => r.json())
-      .then((d) => { if (lastChecked === filePath) setButtonState(d.exists ? 'saved' : 'new', d.summary_exists); })
+      .then((d) => {
+        openButton.textContent = d.opener === 'editor' ? 'Open in editor' : 'Open in Obsidian';
+        if (lastChecked === filePath) setButtonState(d.exists ? 'saved' : 'new', d.summary_exists);
+      })
       .catch(() => {
         // The server may just be busy or restarting (or the request was cut by a navigation): show it, then check again
         if (lastChecked !== filePath) return;

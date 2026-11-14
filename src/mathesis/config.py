@@ -29,7 +29,7 @@ PROVIDER_TYPES = ("ollama", "openai", "claude-code")
 
 KNOWN_KEYS = {
     "server": {"host", "port", "root", "userscript_dir", "report_dir", "notify", "notify_on_save",
-               "obsidian_open", "obsidian_command"},
+               "obsidian_open", "obsidian_command", "editor_command"},
     "summary": {"enabled", "provider", "model", "pipeline", "max_revisions"},
     "lab_guide": {"enabled", "provider", "model"},
 }
@@ -128,6 +128,7 @@ class Settings:
     claude_timeout: int = 900              # seconds
     obsidian_open: bool = True             # "Summary ready" notification opens the summary in Obsidian when clicked
     obsidian_command: str | None = None    # command that hands an obsidian:// URI to Obsidian (auto-detected if unset)
+    editor_command: str | None = None      # text editor used instead when Obsidian is not installed (auto-detected if unset)
     default_provider: str | None = None    # the one provider for every job; [summary] / [lab_guide] override it
     summary_provider: str = "ollama"       # resolved: ollama | gemini | openai | <name in [providers.*]> | none
     summary_model: str | None = None       # overrides the provider's model for summaries
@@ -227,6 +228,7 @@ class Settings:
             claude_timeout=pick("MATHESIS_CLAUDE_TIMEOUT", claude.get("timeout"), cls.claude_timeout, int),
             obsidian_open=flag("MATHESIS_OBSIDIAN_OPEN", server.get("obsidian_open"), True),
             obsidian_command=pick("MATHESIS_OBSIDIAN", server.get("obsidian_command"), None) or None,
+            editor_command=pick("MATHESIS_EDITOR", server.get("editor_command"), None) or None,
             default_provider=default,
             # a job's own provider, else the one default provider; with neither, the built-in choice per job
             summary_provider=e("MATHESIS_SUMMARY_PROVIDER") or summary.get("provider") or default or cls.summary_provider,

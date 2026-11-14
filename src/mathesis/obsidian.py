@@ -1,13 +1,16 @@
-"""Open a file in the running Obsidian through its obsidian:// URI."""
+"""Open a note: in the running Obsidian through its obsidian:// URI, or, when Obsidian is not installed, in a text editor."""
 import glob
 import re
 import shlex
 import shutil
 import subprocess
+import sys
 import urllib.parse
 from pathlib import Path
 
 APPIMAGE_DIRS = ["~/bin", "~/Applications", "~/.local/bin", "~/Downloads"]
+# graphical editors tried (in this order) when MATHESIS_EDITOR is not set; a terminal editor cannot be started by a server
+GUI_EDITORS = ["gnome-text-editor", "gedit", "kate", "kwrite", "mousepad", "xed", "pluma", "geany", "codium", "code", "subl"]
 
 
 def uri_for(path: str | Path) -> str:
@@ -45,3 +48,51 @@ def open_in_obsidian(path: str | Path, configured: str | None = None) -> bool:
     subprocess.Popen(command + [uri_for(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
     return True
+
+
+def editor_command(configured: str | None = None) -> list[str] | None:
+    """The command that opens a file in a text editor, or None.
+
+    1. MATHESIS_EDITOR (may contain arguments, e.g. "code -r")
+    2. macOS: `open -t` (the default text editor); Windows: notepad
+    3. the first graphical editor found on PATH (GUI_EDITORS)
+    4. xdg-open (whatever the desktop uses for the file type)
+    """
+    if configured:
+        return shlex.split(configured)
+    if sys.platform == "darwin":
+        return ["open", "-t"]
+    if sys.platform.startswith("win"):
+        return ["notepad"]
+    for name in GUI_EDITORS:
+        if shutil.which(name):
+            return [name]
+    return ["xdg-open"] if shutil.which("xdg-open") else None
+
+
+def open_in_editor(path: str | Path, configured: str | None = None) -> bool:
+    command = editor_command(configured)
+    if not command:
+        print("No text editor found: set MATHESIS_EDITOR (or [server] editor_command) to a graphical editor")
+        return False
+    subprocess.Popen(command + [str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+    return True
+
+
+def have_obsidian(settings) -> bool:
+    return find_command(settings.obsidian_command) is not None
+
+
+def opener_name(settings) -> str:
+    """"Obsidian" when it can be reached, else "text editor": what a notification or button should say."""
+    return "Obsidian" if have_obsidian(settings) else "text editor"
+
+
+def open_note(path: str | Path, settings) -> str | None:
+    """Open a note in Obsidian if it is installed, else in a text editor. Returns what was used, or None."""
+    if have_obsidian(settings) and open_in_obsidian(path, settings.obsidian_command):
+        return "Obsidian"
+    if not have_obsidian(settings) and open_in_editor(path, settings.editor_command):
+        return "text editor"
+    return None

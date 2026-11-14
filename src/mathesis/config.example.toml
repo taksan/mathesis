@@ -32,7 +32,9 @@
 # root = "~/notes/_study_roadmap"       # the only folder the server may write into
 # notify = true
 # notify_on_save = false
-# obsidian_open = true
+# obsidian_open = true                   # a "ready" notification opens the note when clicked
+# obsidian_command = "/path/to/Obsidian.AppImage"   # how to reach Obsidian (found automatically if installed)
+# editor_command = "gedit"               # used instead when Obsidian is not installed (a graphical editor is found automatically)
 
 # ---- provider details -------------------------------------------------------------------------------------------
 # Built in: ollama, claude-code, gemini, openai. A table here changes or extends them. A provider is only USED when it

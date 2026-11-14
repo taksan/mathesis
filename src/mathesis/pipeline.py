@@ -12,7 +12,7 @@ from pathlib import Path
 from . import coverage
 from .config import Settings
 from .notify import notify
-from .obsidian import open_in_obsidian
+from .obsidian import open_note, opener_name
 from .llm import make_client, should_announce
 
 PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
@@ -97,8 +97,9 @@ def write_summary(content: str, file: str | Path, settings: Settings) -> None:
         out = summary_path(file)
         out.write_text(render(notes, info, settings), encoding="utf-8")
         print(f"Summary written to {out}")
-        on_click = (lambda: open_in_obsidian(out, settings.obsidian_command)) if settings.obsidian_open else None
-        notify("Summary ready", name, enabled=settings.notify, on_click=on_click)
+        on_click = (lambda: open_note(out, settings)) if settings.obsidian_open else None
+        notify("Summary ready", name, enabled=settings.notify, on_click=on_click,
+               action_label=f"Open in {opener_name(settings)}")
     except Exception as e:
         print(f"Error generating summary for {file}: {e}")
         notify("Summary failed", f"{name}: {e}", error=True, enabled=settings.notify)
