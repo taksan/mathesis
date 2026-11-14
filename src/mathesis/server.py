@@ -2,7 +2,7 @@
 
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
-              fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review") are saved as is
+              fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
 POST /open    Header X-File-Path: opens the summary (or the lesson) in a text editor on the server machine (used when Obsidian is missing)
               (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist or Obsidian is not installed)

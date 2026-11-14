@@ -29,6 +29,16 @@ def test_write_creates_missing_directories_and_status_reflects_it(client):
     assert client.get("/status", headers=h).json()["obsidian_uri"] == uri_for(summary_path(target))  # ... or its summary
 
 
+def test_quiz_json_is_saved_as_is_next_to_the_markdown(client):
+    body = '{"title": "Quiz", "questions": []}\n'
+    h = {"X-File-Path": "Udemy/Course/02-all%20questions.json", "X-Mathesis-Kind": "quiz-json"}
+    r = client.post("/write", content=body.encode(), headers=h)
+    assert r.status_code == 200 and r.json()["kind"] == "quiz-json" and r.json()["path"] == "Udemy/Course/02-all questions.json"
+    assert (client.root / "Udemy" / "Course" / "02-all questions.json").read_text() == body
+    assert client.get("/status", headers=h).json()["exists"] is True
+    assert not list((client.root / "Udemy" / "Course").glob("*summary*"))  # saved only: nothing is summarized
+
+
 def test_path_outside_root_is_rejected(client):
     assert client.post("/write", content=b"x", headers={"X-File-Path": "../evil.md"}).status_code == 403
     assert client.get("/status", headers={"X-File-Path": "a/../../x.md"}).status_code == 403

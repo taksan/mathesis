@@ -4,7 +4,7 @@
 // @version      68.9e5d98d
 // @updateURL    http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
 // @downloadURL  http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
-// @description  Adds buttons that save a Udemy lesson transcript, or the incorrect and marked-for-review questions (or all questions) of a quiz result, to the local Mathesis server (mathesis serve)
+// @description  Adds buttons that save a Udemy lesson transcript, or the incorrect and marked-for-review questions (or all questions, as Markdown or JSON) of a quiz result, to the local Mathesis server (mathesis serve)
 // @match        https://www.udemy.com/course/*
 // @grant        none
 // ==/UserScript==
@@ -46,6 +46,9 @@
     const prefix = number === '0' ? '' : number.padStart(width, '0') + '-';
     return { title: name, prefix, base: `${prefix}${normalizeName(name)}` };
   }
+
+  // The JSON copy of a quiz's questions sits next to the Markdown one: "NN-all questions.json".
+  const jsonPathToWrite = () => computePathToWrite(true).replace(/\.md$/, '.json');
 
   function computePathToWrite(allQuestions = false) {
     const { base, prefix } = lessonFileName();
@@ -279,22 +282,54 @@
 
   // "# All questions": every question of the attempt in its original order (the "all" pill), with the explanations,
   // but without the ❌, "your answer", the Incorrect / To Review split or the * for unmarked wrong answers.
-  async function getAllQuestions() {
+  // Every question of the attempt, parsed, in the page's order (the "all" pill; the selected pill is restored afterwards).
+  async function collectAllQuestions() {
     const all = pills();
     const everything = all.find((p) => p.name === 'all');
     const previous = all.find((p) => p.input.checked);
     let questions, warning = '';
     try {
       if (everything && !(await selectPill(everything))) warning = `Could not show exactly the ${everything.count} questions; saved what is on the page. `;
-      questions = statusLabels().map((l) => formatQuestion(parseQuestion(paneOf(l)), false, true));
+      questions = statusLabels().map((l) => parseQuestion(paneOf(l)));
     } finally {
       if (previous && !previous.input.checked) previous.label.click();
     }
     if (!questions.length) { alert('No questions found on this page'); return null; }
     if (warning) alert(warning.trim());
+    return questions;
+  }
+
+  async function getAllQuestions() {
+    const questions = await collectAllQuestions();
+    if (!questions) return null;
     const attempt = attemptLabel();
     return [`# ${lessonFileName().title}`, '', `*${[attempt, `${questions.length} questions`].filter(Boolean).join(' · ')}*`, '',
-      questions.join('\n\n')].join('\n') + '\n';
+      questions.map((q) => formatQuestion(q, false, true)).join('\n\n')].join('\n') + '\n';
+  }
+
+  // The same questions as JSON, for other tools. Nothing says what you picked or got wrong, as in "Copy all questions".
+  // type: "multi" when more than one option is correct, else "single". The option explanations are empty in the quizzes that
+  // only have an overall explanation (and the overall explanation is empty in the ones that explain each option).
+  function questionToJson(q) {
+    return {
+      number: Number(q.number) || null,
+      domain: q.domain,
+      question: q.stem,
+      type: q.answers.filter((a) => a.correct).length > 1 ? 'multi' : 'single',
+      options: q.answers.map((a) => ({ text: a.text, correct: a.correct, explanation: a.explanation })),
+      explanation: q.overall,
+    };
+  }
+
+  async function getQuizJson() {
+    const questions = await collectAllQuestions();
+    if (!questions) return null;
+    return JSON.stringify({
+      title: lessonFileName().title,
+      attempt: attemptLabel(),
+      source: location.href,
+      questions: questions.map(questionToJson),
+    }, null, 2) + '\n';
   }
 
   // ---- button ----
@@ -466,9 +501,20 @@
   const ALL_LABEL = 'Copy all questions';
   allButton.textContent = ALL_LABEL;
   allButton.style.display = 'none';
+  // Fourth button, quiz results only: the same questions as a JSON file (see schema/quiz-questions.schema.json).
+  const jsonButton = document.createElement('button');
+  jsonButton.id = 'save-json-btn';
+  jsonButton.type = 'button';
+  jsonButton.className = 'mx ghost';
+  const JSON_LABEL = 'Save all as JSON';
+  jsonButton.textContent = JSON_LABEL;
+  jsonButton.style.display = 'none';
+  let jsonSaved = false;
   const syncOpenButton = () => {
     openButton.style.display = lessonSaved && panel.style.display !== 'none' ? '' : 'none';
-    allButton.style.display = isQuizReview() && panel.style.display !== 'none' ? '' : 'none';
+    const review = isQuizReview() && panel.style.display !== 'none';
+    allButton.style.display = review ? '' : 'none';
+    jsonButton.style.display = review ? '' : 'none';
   };
   const statusOf = (filePath) => fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } }).then((r) => r.json());
   openButton.addEventListener('click', () => {
@@ -505,6 +551,8 @@
     button.textContent = state === 'saved' ? 'Copy again' : LABEL();
     allButton.classList.toggle('saved', review && allSaved);
     allButton.textContent = review && allSaved ? '✓ All questions saved' : ALL_LABEL;
+    jsonButton.classList.toggle('saved', review && jsonSaved);
+    jsonButton.textContent = review && jsonSaved ? '✓ JSON saved' : JSON_LABEL;
     statusEl.textContent = state === 'unknown' ? 'Server offline' :
       review ? `Incorrect: ${state === 'saved' ? 'saved' : 'not saved'} · All: ${allSaved ? 'saved' : 'not saved'}` :
       state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` : 'Not saved yet';
@@ -525,11 +573,12 @@
     }
     lastChecked = filePath;
     const review = isQuizReview();
-    Promise.all([statusOf(filePath), review ? statusOf(computePathToWrite(true)) : null])
-      .then(([d, all]) => {
+    Promise.all([statusOf(filePath), review ? statusOf(computePathToWrite(true)) : null, review ? statusOf(jsonPathToWrite()) : null])
+      .then(([d, all, json]) => {
         if (lastChecked !== filePath) return;
         openButton.textContent = d.opener === 'editor' ? 'Open in editor' : 'Open in Obsidian';
         allSaved = !!(all && all.exists);
+        jsonSaved = !!(json && json.exists);
         setButtonState(d.exists ? 'saved' : 'new', d.summary_exists);
       })
       .catch(() => {
@@ -605,8 +654,55 @@
         alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
   }
+  // Offline fallback: the browser saves the file instead.
+  function downloadFile(name, text) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function saveJson() {
+    const text = await getQuizJson();
+    if (!text) return;
+    let filePath;
+    try {
+      filePath = jsonPathToWrite();
+    } catch (e) {
+      console.error(e);
+      alert('Could not compute file path: ' + e.message);
+      return;
+    }
+    try {
+      const response = await fetch(`${SERVER}/write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': 'quiz-json' },
+        body: text,
+      });
+      if (!response.ok) {
+        const d = await response.json().catch(() => ({}));
+        throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status });
+      }
+      const data = await response.json();
+      console.log('[Mathesis] saved', data);
+      jsonSaved = true;
+      setButtonState(lastState, lastSummary);
+      alert('All questions saved as JSON! (' + data.path + ')');
+    } catch (error) {
+      console.error('Error:', error);
+      if (!error.status) { // the server could not be reached: keep the work, let the browser save the file
+        downloadFile(filePath.split('/').pop(), text);
+        alert('Could not reach the Mathesis server (' + error + '): the JSON file was downloaded instead.');
+        return;
+      }
+      const id = await reportFailure({ kind: 'quiz-json', path: filePath, status: error.status, error: String(error.message || error), body: text });
+      alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
+    }
+  }
   button.addEventListener('click', () => copyLesson(false));
   allButton.addEventListener('click', () => copyLesson(true));
+  jsonButton.addEventListener('click', saveJson);
 
   // Double Shift shows/hides the button (remembered per site). Any other key between the two presses cancels it.
   const HIDE_KEY = 'mathesis-button-hidden';
@@ -631,7 +727,7 @@
     }
   }, true);
 
-  panel.append(head, button, statusEl, allButton, openButton);
+  panel.append(head, button, statusEl, allButton, jsonButton, openButton);
   document.body.appendChild(panel);
   console.log('[Mathesis] Udemy button added');
 
