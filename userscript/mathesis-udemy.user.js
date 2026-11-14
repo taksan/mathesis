@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Mathesis: save Udemy transcript
 // @namespace    http://tampermonkey.net/
-// @version      50.778ef39
+// @version      53.c0270e0
 // @updateURL    http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
 // @downloadURL  http://127.0.0.1:5000/userscript/mathesis-udemy.user.js
 // @description  Adds buttons that save a Udemy lesson transcript, or the incorrect and marked-for-review questions (or all questions) of a quiz result, to the local Mathesis server (mathesis serve)
