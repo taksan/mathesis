@@ -208,6 +208,15 @@
     #mathesis-fold { background: none; border: none; color: #9aa0a6; cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
     #mathesis-fold:hover { color: #e8eaed; }
     #mathesis-status { color: #9aa0a6; font-size: 12px; margin-top: -2px; }
+    #mathesis-spinner { display: none; width: 12px; height: 12px; flex: none; border: 2px solid #5f6368; border-top-color: #8ab4f8;
+      border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; }
+    @keyframes mathesis-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #mathesis-spinner { animation-duration: 2.4s; } }
+    /* while the page is still being analysed: spinner and text only, no buttons */
+    #mathesis-panel.loading #mathesis-spinner { display: block; }
+    #mathesis-panel.loading #mathesis-dot { display: none; }
+    #mathesis-panel.loading button.mx { display: none !important; }
+    #mathesis-panel.loading #mathesis-status { color: #e8eaed; font-size: 13px; margin-top: 0; }
     #mathesis-panel.folded { width: auto; padding: 8px 10px; }
     #mathesis-panel.folded > :not(#mathesis-head) { display: none; }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
@@ -242,7 +251,9 @@
   const fold = document.createElement('button');
   fold.id = 'mathesis-fold';
   fold.type = 'button';
-  head.append(dot, title, fold);
+  const spinner = document.createElement('span');
+  spinner.id = 'mathesis-spinner';
+  head.append(dot, spinner, title, fold);
   const statusEl = document.createElement('div');
   statusEl.id = 'mathesis-status';
   statusEl.setAttribute('role', 'status');
@@ -258,6 +269,17 @@
   let startFolded = false;
   try { startFolded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) { /* storage blocked */ }
   setFolded(startFolded, false);
+
+  // Until the page type is known (Udemy renders quiz results after the page loads) and the server has answered, the
+  // panel shows a spinner and "Analyzing…" and no buttons: anything shown earlier would describe the wrong page.
+  const SETTLE_MS = 8000; // after this long, stop waiting for the page and show what we have
+  let pageStart = Date.now();
+  const setLoading = () => {
+    panel.classList.add('loading');
+    panel.classList.remove('saved', 'unknown');
+    statusEl.textContent = 'Analyzing…';
+  };
+  setLoading();
 
   // Show whether this lesson was already saved (green) or not (red); grey = server unreachable.
 
@@ -290,6 +312,7 @@
 
   let current = { state: 'new', summaryDone: false };
   function setButtonState(state, summaryDone) {
+    panel.classList.remove('loading');
     current = { state, summaryDone };
     lessonSaved = state === 'saved';
     syncOpenButton();
@@ -300,13 +323,20 @@
       state === 'unknown' ? 'Server offline' : 'Not saved yet';
   }
 
+  const pageReady = () => {
+    if (Date.now() - pageStart > SETTLE_MS) return true;
+    try { computePathToWrite(); } catch (e) { return false; }
+    return !!document.querySelector('ql-quiz, ql-youtube-video, .lab-content-container') || !!bundleSrc(); // page type known
+  };
+
   let lastChecked = null;
   function refreshStatus() {
     let filePath;
     try {
       filePath = computePathToWrite();
-    } catch (e) {
-      return; // page still loading; the interval below will retry
+    } catch (e) { // page still loading; the interval below will retry
+      if (Date.now() - pageStart > SETTLE_MS) setButtonState('new');
+      return;
     }
     lastChecked = filePath;
     fetch('http://127.0.0.1:5000/status', { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
@@ -441,22 +471,23 @@
   })();
 
   // Check now, and again whenever the lesson changes (the site may navigate without a reload).
-  refreshStatus();
+  if (pageReady()) refreshStatus();
   let lastUrl = location.href;
   setInterval(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
+      pageStart = Date.now();
       lastChecked = null;
-      setButtonState('new');
+      setLoading();
     }
     // The page type can change without a URL change (Udemy renders the quiz results after the page loads): the file this
     // page maps to changes then, so ask the server again instead of keeping the answer for the old file.
-    try { if (lastChecked !== null && computePathToWrite() !== lastChecked) lastChecked = null; } catch (e) { /* still loading */ }
-    if (lastChecked === null) refreshStatus();
+    try { if (lastChecked !== null && computePathToWrite() !== lastChecked) { lastChecked = null; setLoading(); } } catch (e) { /* still loading */ }
+    if (lastChecked === null && pageReady()) refreshStatus();
     // The site may replace <body> (the buttons vanish) and the lesson iframe appears after the page loads (the label changes)
     const root = document.body || document.documentElement;
     if (!panel.isConnected) root.appendChild(panel);
     const label = LABEL();
-    if (current.state === 'new' && button.textContent !== label) setButtonState('new');
+    if (current.state === 'new' && !panel.classList.contains('loading') && button.textContent !== label) setButtonState('new');
   }, 1000);
 })();

@@ -316,6 +316,15 @@
     #mathesis-fold { background: none; border: none; color: #9aa0a6; cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
     #mathesis-fold:hover { color: #e8eaed; }
     #mathesis-status { color: #9aa0a6; font-size: 12px; margin-top: -2px; }
+    #mathesis-spinner { display: none; width: 12px; height: 12px; flex: none; border: 2px solid #5f6368; border-top-color: #8ab4f8;
+      border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; }
+    @keyframes mathesis-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #mathesis-spinner { animation-duration: 2.4s; } }
+    /* while the page is still being analysed: spinner and text only, no buttons */
+    #mathesis-panel.loading #mathesis-spinner { display: block; }
+    #mathesis-panel.loading #mathesis-dot { display: none; }
+    #mathesis-panel.loading button.mx { display: none !important; }
+    #mathesis-panel.loading #mathesis-status { color: #e8eaed; font-size: 13px; margin-top: 0; }
     #mathesis-panel.folded { width: auto; padding: 8px 10px; }
     #mathesis-panel.folded > :not(#mathesis-head) { display: none; }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
@@ -350,7 +359,9 @@
   const fold = document.createElement('button');
   fold.id = 'mathesis-fold';
   fold.type = 'button';
-  head.append(dot, title, fold);
+  const spinner = document.createElement('span');
+  spinner.id = 'mathesis-spinner';
+  head.append(dot, spinner, title, fold);
   const statusEl = document.createElement('div');
   statusEl.id = 'mathesis-status';
   statusEl.setAttribute('role', 'status');
@@ -366,6 +377,17 @@
   let startFolded = false;
   try { startFolded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) { /* storage blocked */ }
   setFolded(startFolded, false);
+
+  // Until the page type is known (Udemy renders quiz results after the page loads) and the server has answered, the
+  // panel shows a spinner and "Analyzing…" and no buttons: anything shown earlier would describe the wrong page.
+  const SETTLE_MS = 8000; // after this long, stop waiting for the page and show what we have
+  let pageStart = Date.now();
+  const setLoading = () => {
+    panel.classList.add('loading');
+    panel.classList.remove('saved', 'unknown');
+    statusEl.textContent = 'Analyzing…';
+  };
+  setLoading();
 
 
   // Second button, only while this lesson is saved: opens the summary (or the lesson) in Obsidian.
@@ -414,6 +436,7 @@
   // is "saved" when either exists.
   let allSaved = false, lastState = 'new', lastSummary = false;
   function setButtonState(state, summaryDone) {
+    panel.classList.remove('loading');
     lastState = state; lastSummary = summaryDone;
     const review = isQuizReview();
     const anySaved = state === 'saved' || (review && allSaved);
@@ -429,10 +452,19 @@
       state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` : 'Not saved yet';
   }
 
+  const pageReady = () => {
+    if (Date.now() - pageStart > SETTLE_MS) return true;
+    try { computePathToWrite(); } catch (e) { return false; } // the sidebar has not rendered the current item yet
+    return !/\/result\//.test(location.pathname) || isQuizReview(); // a results URL waits for its questions
+  };
+
   let lastChecked = null;
   function refreshStatus() {
     let filePath;
-    try { filePath = computePathToWrite(); } catch (e) { return; } // page still loading; retried below
+    try { filePath = computePathToWrite(); } catch (e) { // page still loading; retried below
+      if (Date.now() - pageStart > SETTLE_MS) setButtonState('new');
+      return;
+    }
     lastChecked = filePath;
     const review = isQuizReview();
     Promise.all([statusOf(filePath), review ? statusOf(computePathToWrite(true)) : null])
@@ -565,20 +597,21 @@
   })();
 
   // Udemy is a single-page app: re-check whenever the lesson changes.
-  refreshStatus();
+  if (pageReady()) refreshStatus();
   let lastUrl = location.href;
   setInterval(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
+      pageStart = Date.now();
       lastChecked = null;
       allSaved = false;
-      setButtonState('new');
+      setLoading();
     }
     syncOpenButton();
     // The page type can change without a URL change (Udemy renders the quiz results after the page loads): the file this
     // page maps to changes then, so ask the server again instead of keeping the answer for the old file.
-    try { if (lastChecked !== null && computePathToWrite() !== lastChecked) lastChecked = null; } catch (e) { /* still loading */ }
-    if (lastChecked === null) refreshStatus();
+    try { if (lastChecked !== null && computePathToWrite() !== lastChecked) { lastChecked = null; setLoading(); } } catch (e) { /* still loading */ }
+    if (lastChecked === null && pageReady()) refreshStatus();
     const root = document.body || document.documentElement; // the site may replace <body>: put the buttons back
     if (!panel.isConnected) root.appendChild(panel);
   }, 1000);
