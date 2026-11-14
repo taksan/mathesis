@@ -14,6 +14,11 @@ DERIVED = ("-summary.md", "-lab-guide.md", "-incorrect.md", "-all questions.md",
 CACHE = Path("~/.cache/mathesis/embeddings.json").expanduser()
 
 
+def is_derived(name: str) -> bool:
+    """True for a file made from a lesson. A quiz saved again as another attempt is "NN-all questions (attempt 2).md"."""
+    return re.sub(r" \(attempt \d+\)(?=\.md$)", "", name).endswith(DERIVED)
+
+
 @dataclass
 class Match:
     lesson: Path      # transcript file
@@ -27,7 +32,7 @@ def lesson_files(course_dir: Path) -> list[Path]:
     def is_quiz(f: Path) -> bool:
         head = f.read_text(encoding="utf-8")[:400]
         return bool(re.search(r"\*\d+ questions · multiple choice", head))
-    return [f for f in sorted(course_dir.glob("*.md")) if not f.name.endswith(DERIVED) and not is_quiz(f)]
+    return [f for f in sorted(course_dir.glob("*.md")) if not is_derived(f.name) and not is_quiz(f)]
 
 
 def passages(text: str, max_chars: int = 900) -> list[str]:

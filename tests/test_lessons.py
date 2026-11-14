@@ -57,3 +57,14 @@ def test_all_questions_file_is_derived_not_a_lesson(tmp_path):
     for name in ("01-Intro.md", "02-Quiz - incorrect.md", "02-Quiz - all questions.md", "03-incorrect.md", "03-all questions.md", "03-lessons to learn.md"):
         (course / name).write_text("x")
     assert [f.name for f in lessons.lesson_files(course)] == ["01-Intro.md"]
+
+
+def test_quiz_saved_again_as_another_attempt_is_still_derived(tmp_path):
+    course = tmp_path / "Course"
+    course.mkdir()
+    for name in ("01-Intro.md", "03-incorrect.md", "03-incorrect (attempt 2).md", "03-all questions (attempt 12).md",
+                 "02-Quiz - all questions (attempt 3).md"):
+        (course / name).write_text("x")
+    assert [f.name for f in lessons.lesson_files(course)] == ["01-Intro.md"]
+    assert lessons.is_derived("03-all questions (attempt 2).md")
+    assert not lessons.is_derived("03-Intro (attempt 2).md")   # only the known suffixes count

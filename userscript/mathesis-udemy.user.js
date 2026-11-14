@@ -391,6 +391,19 @@
     #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #5f6368; }
     #mathesis-panel button.ghost:hover, #mathesis-panel.saved button.primary:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
     #mathesis-panel button.ghost.saved { border-color: #34a853; color: #81c995; }
+    #mathesis-dialog { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.5); }
+    #mathesis-dialog .box { width: min(400px, 90vw); box-sizing: border-box; padding: 18px; display: flex; flex-direction: column; gap: 10px;
+      background: #202124; color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #mathesis-dialog .box * { box-sizing: border-box; font: inherit; }
+    #mathesis-dialog .sub { color: #9aa0a6; font-size: 13px; }
+    #mathesis-dialog button { width: 100%; padding: 9px 12px; border-radius: 8px; cursor: pointer; text-align: center; overflow-wrap: anywhere;
+      background: transparent; color: #e8eaed; border: 1px solid #5f6368; }
+    #mathesis-dialog button:hover { background: rgba(255, 255, 255, 0.08); }
+    #mathesis-dialog button.primary { background: #8ab4f8; color: #202124; border-color: #8ab4f8; font-weight: 600; }
+    #mathesis-dialog button.primary:hover { filter: brightness(1.08); }
+    #mathesis-dialog button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
   `;
   document.head.appendChild(style);
 
@@ -628,6 +641,59 @@
       .catch(() => null);
   }
 
+  // Saving a quiz result that is already saved: ask whether to overwrite it or keep it and save this one as another
+  // attempt ("NN-all questions (attempt 2).md"). Resolves to 'overwrite', 'keep' or 'cancel'.
+  function askOverwriteOrKeep(existingName, newName) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.id = 'mathesis-dialog';
+      const box = document.createElement('div');
+      box.className = 'box';
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-modal', 'true');
+      const heading = document.createElement('div');
+      heading.textContent = `“${existingName}” is already saved.`;
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      sub.textContent = 'Overwrite it, or keep it and save this one as another attempt?';
+      const choose = (value) => { document.removeEventListener('keydown', onKey, true); overlay.remove(); resolve(value); };
+      const make = (label, value, cls) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = cls || '';
+        b.textContent = label;
+        b.addEventListener('click', () => choose(value));
+        return b;
+      };
+      const keep = make(`Keep both: save as “${newName}”`, 'keep', 'primary');
+      const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); choose('cancel'); } };
+      document.addEventListener('keydown', onKey, true);
+      box.append(heading, sub, keep, make('Overwrite', 'overwrite'), make('Cancel', 'cancel'));
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      keep.focus();
+    });
+  }
+
+  // "Udemy/Course/02-all questions.md" -> "Udemy/Course/02-all questions (attempt 3).md"
+  const withAttempt = (path, n) => path.replace(/(\.[a-z]+)$/i, ` (attempt ${n})$1`);
+
+  // The path to save a quiz result to: the given one when it is free, otherwise whatever the person chooses.
+  // Returns null when they cancel. The new attempt number is the page's ("Attempt 2"), or the next free one.
+  async function chooseTarget(path) {
+    let exists;
+    try { exists = (await statusOf(path)).exists; } catch (e) { return path; } // server unreachable: the save itself reports it
+    if (!exists) return path;
+    const shown = parseInt((attemptLabel().match(/\d+/) || [])[0], 10);
+    let candidate;
+    for (let n = shown >= 2 ? shown : 2; n < 100; n++) {
+      candidate = withAttempt(path, n);
+      try { if (!(await statusOf(candidate)).exists) break; } catch (e) { break; }
+    }
+    const choice = await askOverwriteOrKeep(path.split('/').pop(), candidate.split('/').pop());
+    return choice === 'cancel' ? null : choice === 'keep' ? candidate : path;
+  }
+
   async function copyLesson(allQuestions = false) {
     let kind = isQuizReview() ? (allQuestions ? 'quiz-all' : 'quiz-review') : 'transcript';
     let text = allQuestions ? await getAllQuestions() : await getTranscript();
@@ -646,6 +712,11 @@
         alert('Could not compute file path: ' + e.message);
         return;
       }
+    }
+
+    if (isQuizReview() && kind !== 'raw') { // a quiz saved a second time: overwrite, or keep both as another attempt
+      filePath = await chooseTarget(filePath);
+      if (!filePath) return;
     }
 
     navigator.clipboard.writeText(text).catch((error) => alert('Could not copy text to clipboard: ' + error));
@@ -695,6 +766,8 @@
       alert('Could not compute file path: ' + e.message);
       return;
     }
+    filePath = await chooseTarget(filePath);
+    if (!filePath) return;
     try {
       const response = await fetch(`${SERVER}/write`, {
         method: 'POST',

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import DEFAULT_CONFIG, ConfigError, Settings
-from .lessons import DERIVED
+from .lessons import is_derived
 from .obsidian import editor_command, find_command, open_note, opener_name
 from .llm import make_client
 from .pipeline import PROMPT_DIR, render, summarize, summary_path
@@ -67,12 +67,12 @@ def _transcripts(paths) -> list[Path]:
     found = []
     for p in map(Path, paths):
         if p.is_dir():
-            found += sorted(f for f in p.rglob("*.md") if not f.name.endswith(DERIVED))
+            found += sorted(f for f in p.rglob("*.md") if not is_derived(f.name))
         elif p.is_file():
             found.append(p)
         else:
             print(f"not found: {p}", file=sys.stderr)
-    return [f for f in found if not f.name.endswith(DERIVED)]
+    return [f for f in found if not is_derived(f.name)]
 
 
 def cmd_summarize(args) -> int:
