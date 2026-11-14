@@ -575,6 +575,9 @@
       setButtonState('new');
     }
     syncOpenButton();
+    // The page type can change without a URL change (Udemy renders the quiz results after the page loads): the file this
+    // page maps to changes then, so ask the server again instead of keeping the answer for the old file.
+    try { if (lastChecked !== null && computePathToWrite() !== lastChecked) lastChecked = null; } catch (e) { /* still loading */ }
     if (lastChecked === null) refreshStatus();
     const root = document.body || document.documentElement; // the site may replace <body>: put the buttons back
     if (!panel.isConnected) root.appendChild(panel);

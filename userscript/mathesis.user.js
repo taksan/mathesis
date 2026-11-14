@@ -449,6 +449,9 @@
       lastChecked = null;
       setButtonState('new');
     }
+    // The page type can change without a URL change (Udemy renders the quiz results after the page loads): the file this
+    // page maps to changes then, so ask the server again instead of keeping the answer for the old file.
+    try { if (lastChecked !== null && computePathToWrite() !== lastChecked) lastChecked = null; } catch (e) { /* still loading */ }
     if (lastChecked === null) refreshStatus();
     // The site may replace <body> (the buttons vanish) and the lesson iframe appears after the page loads (the label changes)
     const root = document.body || document.documentElement;
