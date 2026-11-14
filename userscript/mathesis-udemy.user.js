@@ -301,40 +301,79 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    #copy-transcript-btn {
+    #mathesis-panel {
       position: fixed; top: 64px; right: 56px; z-index: 2147483647;
-      padding: 10px 15px; background-color: #ff0000; color: white;
-      border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
+      width: 208px; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+      background: #202124; color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    #copy-transcript-btn:hover { filter: brightness(0.85); }
-    #copy-transcript-btn.saved { background-color: #1e8e3e; }
-    #copy-transcript-btn.unknown { background-color: #5f6368; }
-    #open-obsidian-btn {
-      position: fixed; top: 108px; right: 56px; z-index: 2147483647;
-      padding: 10px 15px; background-color: #7c3aed; color: white;
-      border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
-    }
-    #open-obsidian-btn:hover { filter: brightness(0.85); }
-    #copy-all-btn {
-      position: fixed; top: 152px; right: 56px; z-index: 2147483647;
-      padding: 10px 15px; background-color: #1a73e8; color: white;
-      border: none; border-radius: 5px; font-size: 14px; cursor: pointer;
-    }
-    #copy-all-btn:hover { filter: brightness(0.85); }
-    #copy-all-btn.saved { background-color: #1e8e3e; }
+    #mathesis-panel * { box-sizing: border-box; font: inherit; }
+    #mathesis-head { display: flex; align-items: center; gap: 8px; }
+    #mathesis-dot { width: 9px; height: 9px; border-radius: 50%; background: #f9ab00; flex: none; }
+    #mathesis-panel.saved #mathesis-dot { background: #34a853; }
+    #mathesis-panel.unknown #mathesis-dot { background: #9aa0a6; }
+    #mathesis-title { flex: 1; font-weight: 600; letter-spacing: 0.02em; }
+    #mathesis-fold { background: none; border: none; color: #9aa0a6; cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
+    #mathesis-fold:hover { color: #e8eaed; }
+    #mathesis-status { color: #9aa0a6; font-size: 12px; margin-top: -2px; }
+    #mathesis-panel.folded { width: auto; padding: 8px 10px; }
+    #mathesis-panel.folded > :not(#mathesis-head) { display: none; }
+    #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
+    #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    #mathesis-panel button.primary { background: #8ab4f8; color: #202124; border: 1px solid #8ab4f8; font-weight: 600; }
+    #mathesis-panel button.primary:hover { filter: brightness(1.08); }
+    #mathesis-panel.saved button.primary { background: transparent; color: #e8eaed; border-color: #5f6368; font-weight: 500; }
+    #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #5f6368; }
+    #mathesis-panel button.ghost:hover, #mathesis-panel.saved button.primary:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
+    #mathesis-panel button.ghost.saved { border-color: #34a853; color: #81c995; }
   `;
   document.head.appendChild(style);
 
   const button = document.createElement('button');
   button.id = 'copy-transcript-btn';
+  button.type = 'button';
+  button.className = 'mx primary';
   const LABEL = () => (isQuizReview() ? 'Copy Incorrect + To Review' : 'Copy Transcript');
   button.textContent = LABEL();
+
+  // One small panel instead of loose buttons: a header (status dot, name, fold), the main action, a status line,
+  // then the secondary actions. Amber dot = not saved yet, green = saved, grey = server unreachable.
+  const panel = document.createElement('div');
+  panel.id = 'mathesis-panel';
+  const head = document.createElement('div');
+  head.id = 'mathesis-head';
+  const dot = document.createElement('span');
+  dot.id = 'mathesis-dot';
+  const title = document.createElement('span');
+  title.id = 'mathesis-title';
+  title.textContent = 'Mathesis';
+  const fold = document.createElement('button');
+  fold.id = 'mathesis-fold';
+  fold.type = 'button';
+  head.append(dot, title, fold);
+  const statusEl = document.createElement('div');
+  statusEl.id = 'mathesis-status';
+  statusEl.setAttribute('role', 'status');
+  const FOLD_KEY = 'mathesis-panel-folded';
+  const setFolded = (folded, remember) => {
+    panel.classList.toggle('folded', folded);
+    fold.textContent = folded ? '+' : '–';
+    fold.title = fold.ariaLabel = folded ? 'Expand' : 'Collapse';
+    if (remember) { try { localStorage.setItem(FOLD_KEY, folded ? '1' : '0'); } catch (e) { /* not remembered */ } }
+  };
+  fold.addEventListener('click', () => setFolded(!panel.classList.contains('folded'), true));
+  title.addEventListener('click', () => { if (panel.classList.contains('folded')) setFolded(false, true); });
+  let startFolded = false;
+  try { startFolded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) { /* storage blocked */ }
+  setFolded(startFolded, false);
 
 
   // Second button, only while this lesson is saved: opens the summary (or the lesson) in Obsidian.
   // The server builds the obsidian:// link, so no local path lives in this script.
   const openButton = document.createElement('button');
   openButton.id = 'open-obsidian-btn';
+  openButton.type = 'button';
+  openButton.className = 'mx ghost';
   openButton.textContent = 'Open in Obsidian';
   openButton.style.display = 'none';
   let lessonSaved = false;
@@ -342,12 +381,14 @@
   // Third button, quiz results only: every question with its explanations, nothing marking the wrong ones.
   const allButton = document.createElement('button');
   allButton.id = 'copy-all-btn';
-  const ALL_LABEL = 'Copy All Questions';
+  allButton.type = 'button';
+  allButton.className = 'mx ghost';
+  const ALL_LABEL = 'Copy all questions';
   allButton.textContent = ALL_LABEL;
   allButton.style.display = 'none';
   const syncOpenButton = () => {
-    openButton.style.display = lessonSaved && button.style.display !== 'none' ? '' : 'none';
-    allButton.style.display = isQuizReview() && button.style.display !== 'none' ? '' : 'none';
+    openButton.style.display = lessonSaved && panel.style.display !== 'none' ? '' : 'none';
+    allButton.style.display = isQuizReview() && panel.style.display !== 'none' ? '' : 'none';
   };
   openButton.addEventListener('click', () => {
     let filePath;
@@ -367,12 +408,11 @@
   function setButtonState(state, summaryDone) {
     lessonSaved = state === 'saved';
     syncOpenButton();
-    button.classList.toggle('saved', state === 'saved');
-    button.classList.toggle('unknown', state === 'unknown');
-    button.textContent =
-      state === 'saved' ? `✓ Saved${summaryDone ? ' + summary' : ''} (copy again)` :
-      state === 'unknown' ? `${LABEL()} (server offline)` :
-      LABEL();
+    panel.classList.toggle('saved', state === 'saved');
+    panel.classList.toggle('unknown', state === 'unknown');
+    button.textContent = state === 'saved' ? 'Copy again' : LABEL();
+    statusEl.textContent = state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` :
+      state === 'unknown' ? 'Server offline' : 'Not saved yet';
   }
 
   let lastChecked = null;
@@ -447,7 +487,7 @@
       })
       .then((data) => {
         console.log('[Mathesis] saved', data);
-        if (kind === 'quiz-all') { allButton.classList.add('saved'); allButton.textContent = '✓ All questions saved (copy again)'; }
+        if (kind === 'quiz-all') { allButton.classList.add('saved'); allButton.textContent = '✓ All questions saved'; }
         else if (kind !== 'raw') setButtonState('saved', false);
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!'
@@ -468,7 +508,7 @@
     get() { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch (e) { return false; } },
     set(hidden) { try { localStorage.setItem(HIDE_KEY, hidden ? '1' : '0'); } catch (e) { /* storage blocked: not remembered */ } },
   };
-  const applyHidden = (hidden) => { button.style.display = hidden ? 'none' : ''; syncOpenButton(); };
+  const applyHidden = (hidden) => { panel.style.display = hidden ? 'none' : ''; syncOpenButton(); };
   applyHidden(store.get());
   let lastShift = 0;
   window.addEventListener('keydown', (e) => {
@@ -476,7 +516,7 @@
     if (e.repeat) return;
     const now = Date.now();
     if (lastShift && now - lastShift < 400) {
-      const hidden = button.style.display !== 'none';
+      const hidden = panel.style.display !== 'none';
       applyHidden(hidden);
       store.set(hidden);
       lastShift = 0;
@@ -485,20 +525,19 @@
     }
   }, true);
 
-  document.body.appendChild(button);
-  document.body.appendChild(openButton);
-  document.body.appendChild(allButton);
+  panel.append(head, button, statusEl, allButton, openButton);
+  document.body.appendChild(panel);
   console.log('[Mathesis] Udemy button added');
 
   // First use on this site: a toast says the buttons can be toggled with a double Shift (shown once, then remembered).
   (function showFirstUseHint() {
     const HINT_KEY = 'mathesis-hint-shown';
     try { if (localStorage.getItem(HINT_KEY)) return; } catch (e) { return; } // storage blocked: never nag on every page
-    if (button.style.display === 'none') return;
+    if (panel.style.display === 'none') return;
     const toast = document.createElement('div');
     toast.id = 'mathesis-toast';
     toast.setAttribute('role', 'status');
-    toast.textContent = 'Mathesis: press Shift twice to hide or show these buttons.';
+    toast.textContent = 'Mathesis: press Shift twice to hide or show this panel (or fold it with the – button).';
     toast.style.cssText = 'position:fixed;top:16px;right:56px;max-width:300px;z-index:2147483647;padding:12px 16px;' +
       'background:#202124;color:#fff;border-radius:6px;font:14px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4);' +
       'cursor:pointer;transition:opacity .4s;';
@@ -523,8 +562,6 @@
     syncOpenButton();
     if (lastChecked === null) refreshStatus();
     const root = document.body || document.documentElement; // the site may replace <body>: put the buttons back
-    if (!button.isConnected) root.appendChild(button);
-    if (!openButton.isConnected) root.appendChild(openButton);
-    if (!allButton.isConnected) root.appendChild(allButton);
+    if (!panel.isConnected) root.appendChild(panel);
   }, 1000);
 })();

@@ -26,7 +26,7 @@ mathesis summarize lesson.md --stdout    # print the notes instead of writing a 
 mathesis doctor
 ```
 
-Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds a button under the profile avatar: red = not saved yet, green = saved (with summary).
+Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds a small **Mathesis panel** under the profile avatar: a status dot (amber = not saved yet, green = saved, grey = server offline), the main button, a status line ("Not saved yet", "Saved · summary ready"), and, when they apply, secondary buttons (Open in Obsidian / editor; on Udemy quiz results also "Copy all questions"). The – button folds the panel to a small pill (remembered per site); double Shift hides it completely.
 
 On a **quiz** page the button reads "Copy Quiz": the userscript saves a readable Markdown copy (numbered questions, `- [ ]` options, your selected option checked) as `NN-<quiz title>.md` and tells the server it is a quiz (`X-Mathesis-Kind: quiz`), so no summary is made.
 
@@ -36,7 +36,7 @@ If a page has no recognisable content (no transcript, quiz or lab text), the but
 
 On a **lab** page the button reads "Copy Lab" (`X-Mathesis-Kind: lab`). The lab instructions are saved and summarized like a transcript, and, by default, **Claude Code** (the `claude` CLI, run headless with `claude -p`, no tools, empty temporary folder, so it can only turn text into text) also writes `<lab>-lab-guide.md` next to it: the resources the lab creates, a setup block (variables, APIs), `gcloud` commands per lab task, Terraform only for what gcloud cannot create, verification commands and clean-up. Commands it is unsure about carry a `# VERIFY:` comment; read them before running anything. It takes about a minute and runs in parallel with the summary; a notification ("Lab guide ready") opens the guide in Obsidian. `--no-lab-guide` / `MATHESIS_LAB_GUIDE=0` turns it off, `MATHESIS_CLAUDE_MODEL` picks the model, `MATHESIS_CLAUDE` the CLI path; the prompt is `src/mathesis/prompts/lab_guide.txt`. This uses your Claude Code login (usage counts against it); `provider` in the config file switches it (together with summaries) to Gemini, Ollama or another API; `[lab_guide] provider` switches only the lab guides.
 
-When a lesson is already saved, a second purple button **Open in Obsidian** appears under the main one. It asks the server for the link at click time (the summary if it exists, else the lesson file), so the userscript never holds a local path; this needs the `obsidian://` handler registered on your system.
+When a lesson is already saved, an **Open in Obsidian** button appears in the panel. It asks the server for the link at click time (the summary if it exists, else the lesson file), so the userscript never holds a local path; this needs the `obsidian://` handler registered on your system.
 
 When a save fails, the userscript also uploads an **error report** (`POST /reports`): the page HTML, the URL, what was sent, the server's error and the script version. The alert shows the report ID. Reports are kept in a temporary folder (`MATHESIS_REPORT_DIR`, default `<tmp>/mathesis-reports`, newest 50) and can be inspected through the API:
 
