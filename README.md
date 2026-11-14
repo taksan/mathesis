@@ -26,7 +26,7 @@ mathesis summarize lesson.md --stdout    # print the notes instead of writing a 
 mathesis doctor
 ```
 
-Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds a small **Mathesis panel** under the profile avatar: a status dot (amber = not saved yet, green = saved, grey = server offline; a spinner with "Analyzing…" and no buttons while the page is still loading), the main button, a status line ("Not saved yet", "Saved · summary ready"), and, when they apply, secondary buttons (Open in Obsidian / editor; on Udemy quiz results also "Copy all questions"). The – button folds the panel to a small pill (remembered per site); double Shift hides it completely.
+Install `userscript/mathesis.user.js` in Tampermonkey. On a lesson page it adds a small **Mathesis panel** under the profile avatar: a status dot (amber = not saved yet, green = saved, grey = server offline; a spinner with "Analyzing…" and no buttons while the page is still loading), the main button, a status line ("Not saved yet", "Saved · summary ready"), and, when they apply, secondary buttons (Open in Obsidian / editor; on Udemy quiz results also "Copy all questions"). Drag its header to move it anywhere (the position is remembered per site and kept inside the window; double-click the header to put it back). The – button folds the panel to a small pill (also remembered); double Shift hides it completely.
 
 On a **quiz** page the button reads "Copy Quiz": the userscript saves a readable Markdown copy (numbered questions, `- [ ]` options, your selected option checked) as `NN-<quiz title>.md` and tells the server it is a quiz (`X-Mathesis-Kind: quiz`), so no summary is made.
 

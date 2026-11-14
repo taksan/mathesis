@@ -373,10 +373,68 @@
     if (remember) { try { localStorage.setItem(FOLD_KEY, folded ? '1' : '0'); } catch (e) { /* not remembered */ } }
   };
   fold.addEventListener('click', () => setFolded(!panel.classList.contains('folded'), true));
-  title.addEventListener('click', () => { if (panel.classList.contains('folded')) setFolded(false, true); });
+  // a click on the folded pill expands it (on the header, which owns the drag: the click is not retargeted to the title)
+  head.addEventListener('click', (e) => { if (!moved && e.target !== fold && panel.classList.contains('folded')) setFolded(false, true); });
   let startFolded = false;
   try { startFolded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) { /* storage blocked */ }
   setFolded(startFolded, false);
+
+  // Drag the header to move the panel; the position is remembered per site and kept inside the window.
+  // Double-click the header to put the panel back where it started.
+  const POS_KEY = 'mathesis-panel-pos';
+  const viewW = () => document.documentElement.clientWidth || window.innerWidth;
+  const viewH = () => document.documentElement.clientHeight || window.innerHeight;
+  function clampPos() {
+    const r = panel.getBoundingClientRect();
+    if (!r.width) return; // hidden
+    const top = Math.min(Math.max(0, r.top), Math.max(0, viewH() - r.height));
+    const right = Math.min(Math.max(0, viewW() - r.right), Math.max(0, viewW() - r.width));
+    if (Math.abs(top - r.top) > 0.5) panel.style.top = top + 'px';
+    if (Math.abs(right - (viewW() - r.right)) > 0.5) panel.style.right = right + 'px';
+  }
+  const savePos = () => {
+    const r = panel.getBoundingClientRect();
+    try { localStorage.setItem(POS_KEY, JSON.stringify({ top: Math.round(r.top), right: Math.round(viewW() - r.right) })); } catch (e) { /* not remembered */ }
+  };
+  try {
+    const pos = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+    if (pos && Number.isFinite(pos.top) && Number.isFinite(pos.right)) { panel.style.top = pos.top + 'px'; panel.style.right = pos.right + 'px'; }
+  } catch (e) { /* storage blocked or bad value: default position */ }
+  let drag = null, moved = false;
+  head.title = 'Drag to move · double-click to reset';
+  head.style.cssText += 'cursor:grab;user-select:none;touch-action:none;';
+  head.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target === fold) return;
+    const r = panel.getBoundingClientRect();
+    drag = { x: e.clientX, y: e.clientY, top: r.top, right: viewW() - r.right };
+    moved = false;
+    head.setPointerCapture(e.pointerId);
+    head.style.cursor = 'grabbing';
+  });
+  head.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!moved && Math.hypot(dx, dy) < 4) return; // a click, not a drag
+    moved = true;
+    panel.style.right = drag.right - dx + 'px';
+    panel.style.top = drag.top + dy + 'px';
+    clampPos();
+  });
+  const endDrag = (e) => {
+    if (!drag) return;
+    drag = null;
+    head.style.cursor = 'grab';
+    try { head.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+    if (moved) savePos();
+  };
+  head.addEventListener('pointerup', endDrag);
+  head.addEventListener('pointercancel', endDrag);
+  head.addEventListener('dblclick', (e) => {
+    if (e.target === fold) return;
+    panel.style.top = panel.style.right = '';
+    try { localStorage.removeItem(POS_KEY); } catch (err) { /* nothing stored */ }
+  });
+  window.addEventListener('resize', clampPos);
 
   // Until the page type is known (Udemy renders quiz results after the page loads) and the server has answered, the
   // panel shows a spinner and "Analyzing…" and no buttons: anything shown earlier would describe the wrong page.
@@ -614,5 +672,6 @@
     if (lastChecked === null && pageReady()) refreshStatus();
     const root = document.body || document.documentElement; // the site may replace <body>: put the buttons back
     if (!panel.isConnected) root.appendChild(panel);
+    clampPos(); // the panel grows and shrinks with its state: keep it inside the window
   }, 1000);
 })();
