@@ -198,6 +198,9 @@
       number: (pane.textContent.match(/Question\s*(\d+)/) || [])[1],
       domain: domain && domain.lastElementChild ? domain.lastElementChild.textContent.trim() : '',
       stem: toMarkdown(pane.querySelector('[id="question-prompt"]')),
+      // Two formats: explanations per option (id="question-explanation" inside each option's block), or one
+      // "Overall explanation" for the whole question (id="overall-explanation"), as in the "Practice Exams" quizzes.
+      overall: toMarkdown(pane.querySelector('[id="overall-explanation"]')),
       answers,
     };
   }
@@ -219,6 +222,7 @@
     const isShown = (a) => (plain ? a.correct : a.correct || a.selected);
     const shown = q.answers.filter((a) => isShown(a) && a.explanation);
     const others = q.answers.filter((a) => !isShown(a) && a.explanation);
+    if (q.overall) lines.push('### Explanation', '', q.overall, '');
     if (shown.length) lines.push('### Explanation', '', shown.map((a) => a.explanation).join('\n\n'), '');
     if (others.length) lines.push('> [!note]- Why the other options are wrong', quote(others.map((a) => a.explanation).join('\n\n')), '');
     return lines.join('\n');
