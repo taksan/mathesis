@@ -448,3 +448,34 @@ def test_metadata_only_keeps_the_text_and_the_stored_hash(client):
     assert 'url: "https://example.com/q"' in front and 'lesson: "Teste 1"' in front
     assert front[-1] == before_front[-1]                                                # the hash is the old one: still "changed"
     assert client.get("/status", headers=h).json()["modified"] is True
+
+
+def test_files_carry_the_absolute_path(client):
+    _put(client, "Udemy/C/02-all questions.json")
+    f = client.get("/files", headers={"X-File-Path": "Udemy/C/02-all questions.json"}).json()["files"][0]
+    assert f["abs_path"] == str(client.root / "Udemy/C/02-all questions.json")
+
+
+def test_show_in_folder_only_for_listed_files(client, monkeypatch):
+    shown = []
+    monkeypatch.setattr(server, "open_folder", lambda p: shown.append(p) or True)
+    _put(client, "Udemy/C/02-all questions.json")
+    _put(client, "Udemy/C/random.txt")
+    ok = client.post("/open", headers={"X-File-Path": "Udemy/C/02-all questions.json", "X-Mathesis-Open": "folder"})
+    assert ok.status_code == 200 and ok.json()["opened_with"] == "file manager" and shown[-1].name == "02-all questions.json"
+    assert client.post("/open", headers={"X-File-Path": "Udemy/C/random.txt", "X-Mathesis-Open": "folder"}).status_code == 403
+    monkeypatch.setattr(server, "open_folder", lambda p: False)
+    assert client.post("/open", headers={"X-File-Path": "Udemy/C/02-all questions.json", "X-Mathesis-Open": "folder"}).status_code == 501
+
+
+def test_file_text_is_served_to_the_course_sites_only(client):
+    _put(client, "Udemy/C/02-incorrect.md", "# the text\n")
+    h = {"X-File-Path": "Udemy/C/02-incorrect.md"}
+    assert client.get("/file", headers=h).text == "# the text\n"                                   # no Origin: not a web page
+    assert client.get("/file", headers={**h, "Origin": "https://www.udemy.com"}).status_code == 200
+    assert client.get("/file", headers={**h, "Origin": "https://partner.skills.google"}).status_code == 200
+    assert client.get("/file", headers={**h, "Origin": "https://evil.example"}).status_code == 403
+    assert client.get("/file", headers={**h, "Origin": "https://udemy.com.evil.example"}).status_code == 403
+    assert client.get("/file", headers={"X-File-Path": "Udemy/C/none.md"}).status_code == 404
+    _put(client, "Udemy/C/random.txt")
+    assert client.get("/file", headers={"X-File-Path": "Udemy/C/random.txt"}).status_code == 403   # not a file of a page

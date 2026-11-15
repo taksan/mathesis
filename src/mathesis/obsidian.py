@@ -80,6 +80,22 @@ def open_in_editor(path: str | Path, configured: str | None = None) -> bool:
     return True
 
 
+def open_folder(path: str | Path) -> bool:
+    """Show the file's folder in the system file manager (selecting the file where the platform allows it)."""
+    path = Path(path)
+    if sys.platform == "darwin":
+        command = ["open", "-R", str(path)]
+    elif sys.platform.startswith("win"):
+        command = ["explorer", "/select," + str(path)]
+    elif shutil.which("xdg-open"):
+        command = ["xdg-open", str(path.parent)]
+    else:
+        print("No file manager found (xdg-open)")
+        return False
+    subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return True
+
+
 def have_obsidian(settings) -> bool:
     return find_command(settings.obsidian_command) is not None
 

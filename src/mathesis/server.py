@@ -13,7 +13,9 @@ GET  /status  Header X-File-Path: -> {"exists": bool, "modified": bool, "summary
 GET  /files   Header X-File-Path: the page's main file -> {"files": [{kind, label, state "ready"|"pending"|"failed", path, opener "obsidian"|"editor", obsidian_uri?, attempt?, error?}]}
               every document of the page: transcript, summary, lab guide (pending / failed while the background job runs), or for a quiz
               result the review attempts, "all questions" and its JSON
-POST /open    Header X-File-Path: one path from /files: opens it in a text editor on the server machine (the "editor" opener)
+GET  /file    Header X-File-Path: one path from /files -> its text (plain). Browsers may only ask from udemy.com / skills.google pages.
+POST /open    Header X-File-Path: one path from /files: opens it in a text editor on the server machine (the "editor" opener);
+              with X-Mathesis-Open: folder it shows its folder in the file manager instead
 POST /reports  JSON {url, title, kind, path, status, error, html, body, ...} -> {"id"}: an error report the userscript uploads when a save fails
 GET  /reports  list of reports (newest first); /reports/<id> one report's details; /reports/<id>/html the page; /reports/<id>/body what was sent
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
@@ -36,7 +38,7 @@ from .config import Settings
 from .labguide import guide_path, write_lab_guide
 from .notify import notify
 from .llm import make_client
-from .obsidian import editor_command, find_command, have_obsidian, open_in_editor, uri_for
+from .obsidian import editor_command, find_command, have_obsidian, open_folder, open_in_editor, uri_for
 from .reports import ReportStore
 from .pipeline import summary_path, write_summary
 from .files import Jobs, page_files
@@ -90,7 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind", "X-Mathesis-Meta", "X-Mathesis-Overwrite"],
+        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind", "X-Mathesis-Meta", "X-Mathesis-Overwrite", "X-Mathesis-Open"],
         allow_private_network=True,  # Chrome's Private Network Access preflight (public site -> 127.0.0.1)
     )
 
@@ -181,8 +183,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         obsidian = have_obsidian(settings)
         files = page_files(target, settings.root, jobs, obsidian)
         for f in files:
-            if f["opener"] == "obsidian" and f["path"]:
-                f["obsidian_uri"] = uri_for(settings.root / f["path"])
+            if f["path"]:
+                f["abs_path"] = str(settings.root / f["path"])  # for "copy file path"
+                if f["opener"] == "obsidian":
+                    f["obsidian_uri"] = uri_for(settings.root / f["path"])
         return files
 
     @app.get("/files")
@@ -190,16 +194,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Every document of the page whose main file is X-File-Path (see files.page_files)."""
         return {"files": listing(target_path(x_file_path))}
 
-    @app.post("/open")
-    def open_file(x_file_path: str | None = Header(None)):
-        """Open one file from GET /files in a text editor on the server machine (what the Open button does for the editor
-        opener). Only files of a page listing are opened, never an arbitrary path."""
-        target = target_path(x_file_path)
+    def listed_file(raw_path: str | None) -> Path:
+        """The path of a file that GET /files lists for some page; anything else is refused."""
+        target = target_path(raw_path)
         if not target.is_file():
             raise ApiError(404, "this file is not saved")
         main = target.with_name(re.sub(r"-(summary|lab-guide)\.md$", ".md", target.name))  # a summary belongs to its lesson
         if str(target.relative_to(settings.root)) not in {f["path"] for f in listing(main)}:
             raise ApiError(403, "not a file Mathesis wrote for a page")
+        return target
+
+    # Reading a note's text is more sensitive than listing names: only the sites the userscripts run on may do it from a browser
+    # (any web page could otherwise ask for a note it can guess the path of). Requests without an Origin are not from a page.
+    NOTE_ORIGINS = re.compile(r"^https://([a-z0-9-]+\.)*(udemy\.com|skills\.google|cloudskillsboost\.google)$")
+
+    @app.get("/file")
+    def read_file(request: Request, x_file_path: str | None = Header(None)):
+        """The text of one file from GET /files (what "open online" copies to the clipboard)."""
+        origin = request.headers.get("origin")
+        if origin and not NOTE_ORIGINS.match(origin):
+            raise ApiError(403, "this page may not read notes")
+        target = listed_file(x_file_path)
+        return Response(target.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+
+    @app.post("/open")
+    def open_file(x_file_path: str | None = Header(None), x_mathesis_open: str | None = Header(None)):
+        """Open one file from GET /files in a text editor on the server machine (what the Open button does for the editor
+        opener). Only files of a page listing are opened, never an arbitrary path."""
+        target = listed_file(x_file_path)
+        if (x_mathesis_open or "").lower() == "folder":
+            if not open_folder(target):
+                raise ApiError(501, "no file manager found on the server machine (xdg-open)")
+            return {"opened_with": "file manager", "path": str(target.relative_to(settings.root))}
         if not open_in_editor(target, settings.editor_command):
             raise ApiError(501, "no text editor found on the server machine: set MATHESIS_EDITOR")
         return {"opened_with": "text editor", "path": str(target.relative_to(settings.root))}

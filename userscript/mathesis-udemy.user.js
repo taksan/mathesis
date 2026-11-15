@@ -406,41 +406,46 @@
     #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #46536a; }
     #mathesis-panel button.ghost:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
     #mathesis-panel button.ghost.saved { border-color: #34a853; color: #81c995; }
-    #mathesis-rows { display: grid; grid-template-columns: max-content 66px; gap: 6px; }
-    #mathesis-rows:empty { display: none; }
-    #mathesis-panel.loading #mathesis-rows { display: none; }
-    .mx-cell { position: relative; min-width: 0; }
-    #mathesis-panel .mx-cell button.mx { width: 100%; height: 36px; padding: 0 16px; white-space: nowrap; }
-    #mathesis-panel .mx-cell button.mx.open { padding: 0 6px; background: transparent; color: #8ee0d6; border: 1px solid #5fb7ae; }
-    #mathesis-panel .mx-cell button.mx.open:hover { background: rgba(11, 154, 147, 0.15); }
-    /* hover: the panel's blue, fading in and out */
-    #mathesis-panel .mx-cell button.mx { transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
-    #mathesis-panel .mx-cell button.mx:hover, #mathesis-panel .mx-cell button.mx.open:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; filter: none; }
-    #mathesis-panel .mx-cell button.mx.primary:hover { background: #a9c8fa; border-color: #a9c8fa; color: #14202f; }
-    #mathesis-panel .mx-menu button { transition: background-color 0.25s ease, color 0.25s ease; }
-    #mathesis-panel .mx-menu button:not([aria-disabled="true"]):hover, #mathesis-panel .mx-menu button:not([aria-disabled="true"]):focus-visible { background: rgba(138, 180, 248, 0.28); }
-    @media (prefers-reduced-motion: reduce) { #mathesis-panel .mx-cell button.mx, #mathesis-panel .mx-menu button { transition: none; } }
-    #mathesis-tip { position: absolute; top: 0; width: 230px; max-width: 40vw; padding: 7px 9px; background: #121821; color: #e6ebf2;
+    #mathesis-save, #mathesis-files { display: flex; flex-direction: column; gap: 7px; }
+    #mathesis-files { gap: 2px; border-top: 1px solid #3b4658; padding-top: 8px; margin-top: 2px; }
+    #mathesis-files:empty { display: none; }
+    #mathesis-panel.loading #mathesis-save, #mathesis-panel.loading #mathesis-files { display: none; }
+    #mathesis-panel { min-width: 250px; }
+    #mathesis-panel.folded { min-width: 0; }
+    .mx-label { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: #9aa8bb; margin-bottom: 3px; }
+    .mx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    #mathesis-panel button.mx-chip { height: 30px; padding: 0 12px; border-radius: 15px; background: transparent; color: #F2F0EB;
+      border: 1px solid #46536a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
+    #mathesis-panel button.mx-chip.primary { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; font-weight: 600; }
+    #mathesis-panel button.mx-chip:hover, #mathesis-panel .mx-ib:hover, #mathesis-panel .mx-name:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; }
+    #mathesis-panel button.mx-chip.primary:hover { background: #a9c8fa; border-color: #a9c8fa; }
+    #mathesis-panel button.mx-chip:focus-visible, #mathesis-panel .mx-ib:focus-visible, #mathesis-panel .mx-name:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    .mx-saved { width: 6px; height: 6px; border-radius: 50%; background: #34a853; flex: none; }
+    .mx-file { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 4px 0 6px; border-radius: 6px; position: relative; }
+    .mx-file:hover { background: rgba(138, 180, 248, 0.10); }
+    #mathesis-panel .mx-name { flex: 1; min-width: 0; text-align: left; background: transparent; border: 0; color: #F2F0EB; padding: 3px 4px;
+      border-radius: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background-color 0.25s ease, color 0.25s ease; }
+    .mx-file.wait .mx-name { color: #9aa8bb; cursor: default; }
+    .mx-wait { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #9aa8bb; }
+    .mx-bad { flex: none; font-size: 11px; color: #ff8a80; }
+    .mx-spin { width: 11px; height: 11px; border: 2px solid #46536a; border-top-color: #8ab4f8; border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; }
+    @media (prefers-reduced-motion: reduce) { .mx-spin { animation: none; } #mathesis-panel button.mx-chip, #mathesis-panel .mx-ib, #mathesis-panel .mx-name { transition: none; } }
+    .mx-more { position: relative; flex: none; }
+    #mathesis-panel .mx-ib { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px;
+      background: transparent; color: #F2F0EB; border: 1px solid #46536a; cursor: pointer; padding: 0; transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
+    .mx-menu { position: absolute; right: 0; top: 100%; margin-top: 4px; min-width: 210px; padding: 4px; z-index: 4;
+      background: #1d2531; border: 1px solid #46536a; border-radius: 8px; }
+    .mx-menu[hidden] { display: none !important; }
+    #mathesis-panel .mx-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; background: transparent; border: 0;
+      border-radius: 5px; color: #F2F0EB; text-align: left; cursor: pointer; transition: background-color 0.25s ease, color 0.25s ease; }
+    #mathesis-panel .mx-menu button:hover, #mathesis-panel .mx-menu button:focus-visible { background: #8ab4f8; color: #14202f; outline: none; }
+    .mx-menu svg { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    #mathesis-tip { position: absolute; top: 0; width: 230px; max-width: 40vw; padding: 7px 9px; background: #121821; color: #F2F0EB;
       border: 1px solid #46536a; border-radius: 6px; font-size: 12px; line-height: 1.4; pointer-events: none; opacity: 0;
       transition: opacity 0.15s; z-index: 3; text-align: left; white-space: normal; }
     #mathesis-tip.show { opacity: 1; }
     @media (prefers-reduced-motion: reduce) { #mathesis-tip { transition: none; } }
-    .mx-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #252e3b;
-      display: flex; align-items: center; justify-content: center; pointer-events: none; }
-    .mx-badge.warn { background: #f28b82; color: #202124; font: 700 10px/1 system-ui, sans-serif; }
-    .mx-spin { display: inline-block; flex: none; width: 11px; height: 11px; border: 2px solid #46536a; border-top-color: #7fe0d9;
-      border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; vertical-align: middle; }
-    @media (prefers-reduced-motion: reduce) { .mx-spin { animation: none; } }
-    .mx-menu { position: absolute; right: 0; top: 100%; margin-top: 4px; min-width: 200px; padding: 4px; z-index: 4;
-      background: #1d2531; border: 1px solid #46536a; border-radius: 8px; }
-    .mx-menu[hidden] { display: none !important; }
-    #mathesis-panel .mx-menu button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%;
-      padding: 6px 8px; background: transparent; border: 0; border-radius: 5px; color: #e8eaed; text-align: left; cursor: pointer; }
-    #mathesis-panel .mx-menu button:hover, #mathesis-panel .mx-menu button:focus-visible { background: #3c4043; outline: none; }
-    #mathesis-panel .mx-menu button[aria-disabled="true"] { color: #8a8f94; cursor: default; }
-    #mathesis-panel .mx-menu button[aria-disabled="true"]:hover { background: transparent; }
-    .mx-via { color: #9aa0a6; font-size: 11px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
-    .mx-via.fail { color: #f28b82; }
     #mathesis-status:empty, #mathesis-note:empty { display: none; }
     #mathesis-note { color: #bdc1c6; font-size: 12px; max-width: 280px; }
     #mathesis-retry { background: none; border: 0; padding: 0; color: #8ab4f8; text-decoration: underline; cursor: pointer; font-size: 12px; }
@@ -551,33 +556,36 @@
   setLoading();
 
 
+  // The save chips of this page. Order: to review, all, json.
   const rowSpecs = () => (isQuizReview() ? [
-    { label: 'to Review', primary: true, kinds: ['incorrect'], save: () => copyLesson(false),
-      tipOn: 'Saves the questions you got wrong or marked, with explanations, as NN-incorrect.md. Saving again asks whether to overwrite or keep both as another attempt.',
+    { chip: 'to review', primary: true, kinds: ['incorrect'], save: () => copyLesson(false),
+      tipOn: 'Saves the questions you got wrong or marked, with explanations, as NN-incorrect.md (the attempt is in the name for attempts after the first). Saving again replaces this attempt.',
       tipOff: 'Copies the questions you got wrong or marked, with explanations, to the clipboard. The server is offline, so nothing is saved.' },
-    { label: 'all as JSON', kinds: ['json'], save: saveJson,
-      tipOn: 'Saves every question as a JSON file (options, correct answers, explanations) for other tools. Overwrites the previous file.',
-      tipOff: 'Copies every question as JSON to the clipboard. The server is offline, so nothing is saved.' },
-    { label: 'all questions', kinds: ['all'], save: () => copyLesson(true),
+    { chip: 'all', kinds: ['all'], save: () => copyLesson(true),
       tipOn: 'Saves every question with its explanations as NN-all questions.md, a clean copy of the whole test. Overwrites the previous file.',
       tipOff: 'Copies every question with its explanations to the clipboard. The server is offline, so nothing is saved.' },
+    { chip: 'json', kinds: ['json'], save: saveJson,
+      tipOn: 'Saves every question as a JSON file (options, correct answers, explanations) for other tools. Overwrites the previous file.',
+      tipOff: 'Copies every question as JSON to the clipboard. The server is offline, so nothing is saved.' },
   ] : [
-    { label: 'Transcript', primary: true, kinds: ['summary', 'transcript'], save: () => copyLesson(false),
+    { chip: 'transcript', primary: true, kinds: ['transcript'], save: () => copyLesson(false),
       tipOn: 'Saves the transcript of this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.',
       tipOff: 'Copies the transcript to the clipboard. The server is offline, so nothing is saved.' },
   ]);
+  const transcriptName = () => 'transcript';
   const pagePath = () => computePathToWrite(false); // quiz results: the review file; the server finds its siblings and attempts
   const statusOf = (filePath) => fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } }).then((r) => r.json());
 
-  // ---- rows: one per kind of file, Save on the left, Open on the right (only once that file exists) ----
-  // `rowSpecs()` and `pagePath()` come from the page type (below). The server (GET /files) says what exists, what is still
-  // being written (summary, lab guide) and which program opens each file, so this script never guesses a file name.
-  let serverUp = true;        // false: the buttons say "Copy" and only copy to the clipboard; nothing is sent
-  const verb = () => (serverUp ? 'Save' : 'Copy');
+  // ---- save chips on top, one row per file below (click a name to open it, "⋯" for the rest) ----
+  // `rowSpecs()`, `pagePath()` and `transcriptName()` come from the page type (above). The server (GET /files) says what exists, what is
+  // still being written (summary, lab guide) and which program opens each file, so this script never guesses a file name.
+  let serverUp = true;        // false: the chips only copy to the clipboard; nothing is sent
   let files = [];             // answer of GET /files for this page
   let lastChecked = null, pollTimer = null, noteTimer = null, renderKey = '';
-  const rowsEl = document.createElement('div');
-  rowsEl.id = 'mathesis-rows';
+  const saveEl = document.createElement('div');
+  saveEl.id = 'mathesis-save';
+  const filesEl = document.createElement('div');
+  filesEl.id = 'mathesis-files';
   const noteEl = document.createElement('div');
   noteEl.id = 'mathesis-note';
   noteEl.setAttribute('role', 'status');
@@ -587,141 +595,186 @@
     noteTimer = setTimeout(() => { noteEl.textContent = ''; }, 8000);
   };
   const closeMenus = () => {
-    rowsEl.querySelectorAll('.mx-menu').forEach((m) => { m.hidden = true; });
-    rowsEl.querySelectorAll('[aria-expanded]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    filesEl.querySelectorAll('.mx-menu').forEach((m) => { m.hidden = true; });
+    filesEl.querySelectorAll('[aria-expanded]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
   };
   document.addEventListener('click', closeMenus);
 
-  // One tooltip per panel, shown beside it (so it never covers a button): on the left, or on the right when the panel
-  // has been dragged to the left half of the window. It follows the hovered or focused button's row.
+  // One tooltip per panel, shown beside it (so it never covers a button): on the left, or on the right when the panel has been
+  // dragged to the left half of the window. It follows the hovered or focused element.
   const tipEl = document.createElement('div');
   tipEl.id = 'mathesis-tip';
   tipEl.setAttribute('aria-hidden', 'true');
-  function withTip(cell, button, text) {
-    button.setAttribute('aria-label', button.textContent + '. ' + text);
-    cell.dataset.tip = text;
-    cell.append(button);
-  }
-  function showTip(cell) {
-    if (!cell || !cell.dataset.tip) return;
-    const p = panel.getBoundingClientRect(), c = cell.getBoundingClientRect();
-    tipEl.textContent = cell.dataset.tip;
-    tipEl.style.top = Math.max(0, c.top - p.top - 1) + 'px';
-    const onRight = p.left + p.width / 2 < viewW() / 2;
-    tipEl.style.left = onRight ? 'calc(100% + 10px)' : 'auto';
-    tipEl.style.right = onRight ? 'auto' : 'calc(100% + 10px)';
-    tipEl.classList.add('show');
+  function tipOn(node, text) {
+    node.setAttribute('aria-label', text);
+    const show = () => {
+      const p = panel.getBoundingClientRect(), c = node.getBoundingClientRect();
+      tipEl.textContent = text;
+      tipEl.style.top = Math.max(0, c.top - p.top - 4) + 'px';
+      const onRight = p.left + p.width / 2 < viewW() / 2;
+      tipEl.style.left = onRight ? 'calc(100% + 10px)' : 'auto';
+      tipEl.style.right = onRight ? 'auto' : 'calc(100% + 10px)';
+      tipEl.classList.add('show');
+    };
+    const hide = () => tipEl.classList.remove('show');
+    node.addEventListener('mouseenter', show);
+    node.addEventListener('mouseleave', hide);
+    node.addEventListener('focus', show);
+    node.addEventListener('blur', hide);
   }
   const hideTip = () => tipEl.classList.remove('show');
-  rowsEl.addEventListener('mouseover', (e) => showTip(e.target.closest('.mx-cell')));
-  rowsEl.addEventListener('focusin', (e) => showTip(e.target.closest('.mx-cell')));
-  rowsEl.addEventListener('mouseout', hideTip);
-  rowsEl.addEventListener('focusout', hideTip);
 
-  const NAMES = { incorrect: 'the review', all: 'all questions', json: 'the JSON file', summary: 'the summary', transcript: 'the transcript', 'lab-guide': 'the lab guide' };
-  const nameOf = (f) => NAMES[f.kind] || f.label.toLowerCase();
+  const ICONS = {
+    open: '<svg viewBox="0 0 16 16"><path d="M4 1.8h5l3 3V14H4z"/><path d="M9 1.8v3h3"/></svg>',
+    online: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>',
+    copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>',
+    folder: '<svg viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.4 1.6h7v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></svg>',
+  };
+  // Markdown goes to StackEdit, JSON to a JSON editor. They cannot read the disk, so the text is copied and the editor opens in a new tab.
+  const ONLINE = { md: { name: 'StackEdit', url: 'https://stackedit.io/app' }, json: { name: 'JSON Editor Online', url: 'https://jsoneditoronline.org/' } };
 
+  const displayName = (f) => ({
+    incorrect: `to review · attempt ${f.attempt || 1}`, all: 'all questions', json: 'all questions (json)',
+    'lab-guide': 'lab guide', summary: 'summary', transcript: transcriptName(),
+  }[f.kind] || f.label.toLowerCase());
+  const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
+
+  async function toClipboard(text, done) {
+    try { await navigator.clipboard.writeText(text); say(done); } catch (e) { say('Could not copy: ' + e.message); }
+  }
+  async function serverCall(path, f, headers = {}) {
+    const r = await fetch(`${SERVER}${path}`, { method: path === '/open' ? 'POST' : 'GET', headers: { 'X-File-Path': encodeURIComponent(f.path), ...headers } });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status + ' ' + r.statusText);
+    return r;
+  }
   async function openFile(f) {
-    if (f.state === 'pending') return;
-    if (f.state === 'failed') { say(`The ${nameOf(f).replace(/^the /, '')} was not written (${f.error || 'see the server log'}). Save again to retry.`); return; }
     if (f.opener === 'obsidian' && f.obsidian_uri) { window.location.href = f.obsidian_uri; return; }
-    try { // a program on the server machine opens it (the text editor)
-      const r = await fetch(`${SERVER}/open`, { method: 'POST', headers: { 'X-File-Path': encodeURIComponent(f.path) } });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || r.status + ' ' + r.statusText);
-    } catch (e) {
-      navigator.clipboard.writeText(f.path).catch(() => {});
-      say(`Could not open it: ${e.message}. The path was copied.`);
+    try { await serverCall('/open', f); } catch (e) { toClipboard(f.abs_path || f.path, `Could not open it (${e.message}). The path was copied.`); }
+  }
+  async function showInFolder(f) {
+    try { await serverCall('/open', f, { 'X-Mathesis-Open': 'folder' }); } catch (e) { say(`Could not open the folder: ${e.message}`); }
+  }
+  async function openOnline(f) {
+    const editor = f.kind === 'json' ? ONLINE.json : ONLINE.md;
+    try {
+      const text = await (await serverCall('/file', f)).text();
+      await navigator.clipboard.writeText(text);
+      say(`Content copied: paste it into ${editor.name}.`);
+      window.open(editor.url, '_blank', 'noopener');
+    } catch (e) { say(`Could not copy the content: ${e.message}`); }
+  }
+
+  function fileRow(f) {
+    const row = document.createElement('div');
+    row.className = 'mx-file' + (f.state === 'pending' ? ' wait' : '');
+    const name = document.createElement(f.state === 'ready' ? 'button' : 'span');
+    name.className = 'mx-name';
+    name.textContent = displayName(f);
+    row.append(name);
+    if (f.state === 'pending') {
+      const wait = document.createElement('span');
+      wait.className = 'mx-wait';
+      wait.innerHTML = '<span class="mx-spin"></span>writing…';
+      row.append(wait);
+      return row;
     }
+    if (f.state === 'failed') {
+      const bad = document.createElement('span');
+      bad.className = 'mx-bad';
+      bad.textContent = 'failed';
+      bad.title = f.error || '';
+      name.addEventListener('click', () => say(`The ${displayName(f)} was not written (${f.error || 'see the server log'}). Save again to retry.`));
+      row.append(bad);
+      return row;
+    }
+    name.type = 'button';
+    name.addEventListener('click', () => openFile(f));
+    tipOn(name, `Open locally in ${via(f)}`);
+    const more = document.createElement('div');
+    more.className = 'mx-more';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'mx-ib';
+    toggle.textContent = '⋯';
+    toggle.setAttribute('aria-haspopup', 'menu');
+    toggle.setAttribute('aria-expanded', 'false');
+    tipOn(toggle, 'Open online, copy the path, show in folder');
+    const menu = document.createElement('div');
+    menu.className = 'mx-menu';
+    menu.hidden = true;
+    menu.setAttribute('role', 'menu');
+    const editor = f.kind === 'json' ? ONLINE.json : ONLINE.md;
+    for (const [icon, text, run] of [
+      ['open', `Open locally in ${via(f)}`, () => openFile(f)],
+      ['online', `Copy the content and open ${editor.name}`, () => openOnline(f)],
+      ['copy', 'Copy file path', () => toClipboard(f.abs_path || f.path, 'Path copied.')],
+      ['folder', 'Show in folder', () => showInFolder(f)],
+    ]) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitem');
+      item.innerHTML = ICONS[icon];
+      item.append(document.createTextNode(text));
+      item.addEventListener('click', (e) => { e.stopPropagation(); closeMenus(); run(); });
+      menu.append(item);
+    }
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasHidden = menu.hidden;
+      closeMenus();
+      menu.hidden = !wasHidden;
+      toggle.setAttribute('aria-expanded', String(wasHidden));
+      if (wasHidden) menu.querySelector('button').focus();
+    });
+    menu.addEventListener('keydown', (e) => {
+      const all = [...menu.querySelectorAll('button')];
+      const i = all.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); all[(i + 1) % all.length].focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); all[(i - 1 + all.length) % all.length].focus(); }
+      else if (e.key === 'Escape') { closeMenus(); toggle.focus(); }
+    });
+    more.append(toggle, menu);
+    row.append(more);
+    return row;
   }
 
   function renderRows() {
     const specs = rowSpecs();
-    const key = JSON.stringify([serverUp, files, specs.map((s) => s.label)]);
+    const key = JSON.stringify([serverUp, files, specs.map((s) => s.chip)]);
     if (key === renderKey) return;
     renderKey = key;
     hideTip();
-    rowsEl.textContent = '';
+    // save chips (a small green dot says that file exists)
+    saveEl.textContent = '';
+    const label = document.createElement('div');
+    label.className = 'mx-label';
+    label.textContent = serverUp ? 'save' : 'copy';
+    const chips = document.createElement('div');
+    chips.className = 'mx-chips';
     for (const spec of specs) {
-      const left = document.createElement('div');
-      left.className = 'mx-cell l';
-      const save = document.createElement('button');
-      save.type = 'button';
-      save.className = 'mx ' + (spec.primary ? 'primary' : 'ghost');
-      save.textContent = `${verb()} ${spec.label}`;
-      save.addEventListener('click', spec.save);
-      withTip(left, save, serverUp ? spec.tipOn : spec.tipOff);
-      const right = document.createElement('div');
-      right.className = 'mx-cell r';
-      const items = serverUp ? files.filter((f) => spec.kinds.includes(f.kind)) : [];
-      if (items.length) {
-        const many = items.length > 1;
-        const waiting = items.some((f) => f.state === 'pending');
-        const failed = items.filter((f) => f.state === 'failed');
-        const open = document.createElement('button');
-        open.type = 'button';
-        open.className = 'mx open';
-        open.textContent = many ? 'Open ▾' : 'Open';
-        const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
-        withTip(right, open, many ? 'Choose what to open.' + (waiting ? ' Greyed-out documents are still being written.' : '')
-          + failed.map((f) => ` Warning: the ${nameOf(f).replace(/^the /, '')} was not written (${f.error || 'see the server log'}).`).join('')
-          : `Opens ${nameOf(items[0])} in ${via(items[0])}.`);
-        if (waiting || failed.length) { // a spinner while something is being written; a red ! when a document could not be written
-          const badge = document.createElement('span');
-          badge.className = 'mx-badge' + (waiting ? '' : ' warn');
-          if (waiting) badge.innerHTML = '<span class="mx-spin"></span>'; else badge.textContent = '!';
-          right.append(badge);
-        }
-        if (!many) {
-          open.addEventListener('click', () => openFile(items[0]));
-        } else {
-          open.setAttribute('aria-haspopup', 'menu');
-          open.setAttribute('aria-expanded', 'false');
-          const menu = document.createElement('div');
-          menu.className = 'mx-menu';
-          menu.hidden = true;
-          menu.setAttribute('role', 'menu');
-          for (const f of items) {
-            const item = document.createElement('button');
-            item.type = 'button';
-            item.setAttribute('role', 'menuitem');
-            const name = document.createElement('span');
-            name.textContent = f.label + (f.attempt && f === items[0] ? ' (newest)' : '');
-            const side = document.createElement('span');
-            side.className = 'mx-via';
-            if (f.state === 'pending') {
-              item.setAttribute('aria-disabled', 'true');
-              side.innerHTML = 'writing… <span class="mx-spin"></span>';
-            } else if (f.state === 'failed') {
-              side.classList.add('fail');
-              side.textContent = 'failed';
-              item.title = f.error || '';
-            } else {
-              side.textContent = via(f).replace('your text editor', 'editor');
-            }
-            item.append(name, side);
-            item.addEventListener('click', () => { closeMenus(); openFile(f); });
-            menu.append(item);
-          }
-          open.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const wasHidden = menu.hidden;
-            closeMenus();
-            menu.hidden = !wasHidden;
-            open.setAttribute('aria-expanded', String(wasHidden));
-            if (wasHidden) menu.querySelector('button').focus();
-          });
-          menu.addEventListener('keydown', (e) => {
-            const all = [...menu.querySelectorAll('button')];
-            const i = all.indexOf(document.activeElement);
-            if (e.key === 'ArrowDown') { e.preventDefault(); all[(i + 1) % all.length].focus(); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); all[(i - 1 + all.length) % all.length].focus(); }
-            else if (e.key === 'Escape') { closeMenus(); open.focus(); }
-          });
-          right.append(menu);
-        }
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'mx-chip' + (spec.primary ? ' primary' : '');
+      if (serverUp && files.some((f) => spec.kinds.includes(f.kind) && f.state === 'ready')) {
+        const dot = document.createElement('span');
+        dot.className = 'mx-saved';
+        chip.append(dot);
       }
-      rowsEl.append(left, right);
+      chip.append(document.createTextNode(spec.chip));
+      chip.addEventListener('click', spec.save);
+      tipOn(chip, serverUp ? spec.tipOn : spec.tipOff);
+      chips.append(chip);
+    }
+    saveEl.append(label, chips);
+    // files
+    filesEl.textContent = '';
+    const shown = serverUp ? files : [];
+    if (shown.length) {
+      const head = document.createElement('div');
+      head.className = 'mx-label';
+      head.textContent = 'files';
+      filesEl.append(head);
+      for (const f of shown) filesEl.append(fileRow(f));
     }
   }
 
@@ -937,7 +990,7 @@
     }
   }, true);
 
-  panel.append(head, rowsEl, statusEl, noteEl, tipEl);
+  panel.append(head, saveEl, filesEl, statusEl, noteEl, tipEl);
   document.body.appendChild(panel);
   console.log('[Mathesis] Udemy button added');
 
