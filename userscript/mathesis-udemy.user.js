@@ -402,6 +402,7 @@
     /* hover: light orange that fades in and out */
     #mathesis-panel .mx-cell button.mx { transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
     #mathesis-panel .mx-cell button.mx:hover, #mathesis-panel .mx-cell button.mx.open:hover { background: #ffcc80; border-color: #ffcc80; color: #202124; filter: none; }
+    #mathesis-panel .mx-cell button.mx.primary:hover { background: #a9c8fa; border-color: #a9c8fa; color: #14202f; }
     #mathesis-panel .mx-menu button { transition: background-color 0.25s ease, color 0.25s ease; }
     #mathesis-panel .mx-menu button:not([aria-disabled="true"]):hover, #mathesis-panel .mx-menu button:not([aria-disabled="true"]):focus-visible { background: rgba(255, 204, 128, 0.28); }
     @media (prefers-reduced-motion: reduce) { #mathesis-panel .mx-cell button.mx, #mathesis-panel .mx-menu button { transition: none; } }
