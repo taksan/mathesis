@@ -421,3 +421,12 @@ def test_only_a_changed_body_counts_as_an_edit():
     assert frontmatter.is_modified(text + "a note\n")
     assert frontmatter.is_modified("---\ntype: x\n---\nbody\n")                            # frontmatter without a hash
     assert not frontmatter.is_modified("# plain file\n")                                   # no frontmatter: never overwritten anyway
+
+
+def test_a_review_file_without_an_attempt_number_is_attempt_one(client):
+    _put(client, "Udemy/C/03-incorrect.md")                                   # saved before attempts were in the name
+    r = client.get("/files", headers={"X-File-Path": "Udemy/C/03-incorrect.md"}).json()["files"]
+    assert [(f["kind"], f["attempt"], f["label"]) for f in r] == [("incorrect", 1, "Attempt 1")]
+    _put(client, "Udemy/C/03-incorrect (attempt 2).md")
+    r = client.get("/files", headers={"X-File-Path": "Udemy/C/03-incorrect (attempt 2).md"}).json()["files"]
+    assert [f["attempt"] for f in r] == [2, 1]                                 # the plain file still counts, as the first
