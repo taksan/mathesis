@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Mathesis: save Google Skills transcript
 // @namespace    http://tampermonkey.net/
-// @version      98.6fb8224
+// @version      100.33e21b8
 // @updateURL    http://127.0.0.1:5000/userscript/mathesis.user.js
 // @downloadURL  http://127.0.0.1:5000/userscript/mathesis.user.js
 // @description  Adds a button that copies a Google Skills lesson transcript / lab instructions and sends them to the local Mathesis server (mathesis serve)
