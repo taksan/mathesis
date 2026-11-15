@@ -399,12 +399,12 @@
     #mathesis-panel .mx-cell button.mx { width: 100%; height: 36px; padding: 0 16px; white-space: nowrap; }
     #mathesis-panel .mx-cell button.mx.open { padding: 0 6px; background: transparent; color: #8ee0d6; border: 1px solid #5fb7ae; }
     #mathesis-panel .mx-cell button.mx.open:hover { background: rgba(11, 154, 147, 0.15); }
-    /* hover: light orange that fades in and out */
+    /* hover: the panel's blue, fading in and out */
     #mathesis-panel .mx-cell button.mx { transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
-    #mathesis-panel .mx-cell button.mx:hover, #mathesis-panel .mx-cell button.mx.open:hover { background: #ffcc80; border-color: #ffcc80; color: #202124; filter: none; }
+    #mathesis-panel .mx-cell button.mx:hover, #mathesis-panel .mx-cell button.mx.open:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; filter: none; }
     #mathesis-panel .mx-cell button.mx.primary:hover { background: #a9c8fa; border-color: #a9c8fa; color: #14202f; }
     #mathesis-panel .mx-menu button { transition: background-color 0.25s ease, color 0.25s ease; }
-    #mathesis-panel .mx-menu button:not([aria-disabled="true"]):hover, #mathesis-panel .mx-menu button:not([aria-disabled="true"]):focus-visible { background: rgba(255, 204, 128, 0.28); }
+    #mathesis-panel .mx-menu button:not([aria-disabled="true"]):hover, #mathesis-panel .mx-menu button:not([aria-disabled="true"]):focus-visible { background: rgba(138, 180, 248, 0.28); }
     @media (prefers-reduced-motion: reduce) { #mathesis-panel .mx-cell button.mx, #mathesis-panel .mx-menu button { transition: none; } }
     #mathesis-tip { position: absolute; top: 0; width: 230px; max-width: 40vw; padding: 7px 9px; background: #121821; color: #e6ebf2;
       border: 1px solid #46536a; border-radius: 6px; font-size: 12px; line-height: 1.4; pointer-events: none; opacity: 0;
