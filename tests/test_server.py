@@ -430,3 +430,20 @@ def test_a_review_file_without_an_attempt_number_is_attempt_one(client):
     _put(client, "Udemy/C/03-incorrect (attempt 2).md")
     r = client.get("/files", headers={"X-File-Path": "Udemy/C/03-incorrect (attempt 2).md"}).json()["files"]
     assert [f["attempt"] for f in r] == [2, 1]                                 # the plain file still counts, as the first
+
+
+def test_metadata_only_keeps_the_text_and_the_stored_hash(client):
+    h = {"X-File-Path": "Udemy/Curso/01-incorrect.md", "X-Mathesis-Kind": "quiz-review"}
+    client.post("/write", content=b"# generated\n", headers=h)
+    f = client.root / "Udemy/Curso/01-incorrect.md"
+    f.write_text(f.read_text() + "\nMy note.\n")
+    before_front, before_body = frontmatter.split(f.read_text())
+    assert client.post("/write", content=b"# newer\n", headers=h).status_code == 409
+    r = client.post("/write", content=b"# newer\n", headers={**h, "X-Mathesis-Overwrite": "metadata",
+                    "X-Mathesis-Meta": meta_header(course="Curso", lesson="Teste 1", url="https://example.com/q")})
+    assert r.status_code == 200 and r.json()["metadata_only"] is True
+    front, body_after = frontmatter.split(f.read_text())
+    assert body_after == before_body and "My note." in body_after                       # not a character of the text changed
+    assert 'url: "https://example.com/q"' in front and 'lesson: "Teste 1"' in front
+    assert front[-1] == before_front[-1]                                                # the hash is the old one: still "changed"
+    assert client.get("/status", headers=h).json()["modified"] is True

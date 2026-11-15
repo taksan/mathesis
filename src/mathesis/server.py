@@ -5,7 +5,8 @@ POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body:
               Markdown files get YAML frontmatter (type, course, lesson, url, hash of the body). A file that already exists without
               frontmatter is not overwritten: the frontmatter is added and the rest is left as it is ("kept": true in the answer).
               A file whose body no longer matches the hash in its frontmatter (the person added notes) is not overwritten either:
-              409 {"error", "code": "modified"} unless the request has X-Mathesis-Overwrite: yes
+              409 {"error", "code": "modified"} unless the request has X-Mathesis-Overwrite: yes (replace it) or metadata (keep the
+              text, only update the frontmatter: "metadata_only": true in the answer)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "modified": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
@@ -239,7 +240,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if kind in FILE_TYPES and target.suffix == ".md":  # frontmatter: type, course, lesson, url, hash of the body
             try:
                 existing = target.read_text(encoding="utf-8") if target.is_file() else None
-                if existing is not None and frontmatter.is_modified(existing) and (x_mathesis_overwrite or "").lower() != "yes":
+                mode = (x_mathesis_overwrite or "").lower()
+                if existing is not None and mode == "metadata":  # keep the text as it is, only refresh the metadata
+                    refreshed = frontmatter.refresh(existing, page_meta(x_mathesis_meta, kind, target))
+                    target.write_text(refreshed, encoding="utf-8")
+                    print(f"updated metadata only {target}")
+                    return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": 0, "kind": kind,
+                            "kept": True, "metadata_only": True}
+                if existing is not None and frontmatter.is_modified(existing) and mode != "yes":
                     raise ApiError(409, "this file was changed after it was saved (your notes?): saving would overwrite them", "modified")
                 text, kept = frontmatter.apply(existing, content.decode("utf-8"), page_meta(x_mathesis_meta, kind, target))
                 written = text.encode("utf-8")

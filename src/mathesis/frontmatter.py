@@ -81,3 +81,23 @@ def apply(existing: str | None, content: str, meta: dict[str, str]) -> tuple[str
         else:
             out[idx] = text
     return "---\n" + "\n".join(out) + "\n---\n" + body, kept
+
+
+def refresh(existing: str, meta: dict[str, str]) -> str:
+    """Update our keys in the frontmatter of `existing` and leave everything else alone, including the stored hash (so a file with
+    notes in it still counts as changed afterwards). A file without frontmatter gets it added, as in `apply`."""
+    front, body = split(existing)
+    if front is None:
+        return apply(existing, "", meta)[0]
+    out = list(front)
+    for key in OWNED:
+        value = meta.get(key)
+        if key == "hash" or not value:
+            continue
+        text = _line(key, value)
+        idx = next((i for i, l in enumerate(out) if re.match(rf"{key}\s*:", l)), None)
+        if idx is None:
+            out.insert(len(out) - 1 if out and out[-1].startswith("hash") else len(out), text)  # before the hash line
+        else:
+            out[idx] = text
+    return "---\n" + "\n".join(out) + "\n---\n" + body

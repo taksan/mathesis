@@ -832,7 +832,7 @@
     const send = (overwrite) => fetch(`${SERVER}/write`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader(),
-                 ...(overwrite ? { 'X-Mathesis-Overwrite': 'yes' } : {}) },
+                 ...(overwrite ? { 'X-Mathesis-Overwrite': overwrite } : {}) },
       body: text,
     })
       .then((response) => {
@@ -844,13 +844,18 @@
       .catch((error) => {
         // the file has notes in it (its body no longer matches the hash in its frontmatter): ask, then save over them
         if (error.code !== 'modified') throw error;
-        if (confirm('The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?')) return send(true);
+        if (confirm('The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?')) return send('yes');
+        if (confirm('Keep your text as it is and only update the metadata (frontmatter) of the file?')) return send('metadata');
         throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
       });
     send(false)
       .then((data) => {
         console.log('[Mathesis] saved', data);
         refreshFiles();
+        if (data.metadata_only) {
+          alert('Only the metadata (frontmatter) was updated. Your text is untouched.');
+          return;
+        }
         if (data.kept) { // a file with your own text and no metadata: the server only added the metadata
           alert('This file already existed without metadata, so it was not overwritten: only the metadata (frontmatter) was added, and your text is untouched.');
           return;
