@@ -352,7 +352,8 @@ def test_kinds_map_to_file_types_and_fall_back_to_the_path(client):
     for kind, expected in [("transcript", "transcript"), ("lab", "lab"), ("quiz-all", "all-questions"), ("quiz", "quiz")]:
         client.post("/write", content=b"text", headers={"X-File-Path": f"G/Course X/05-{kind}.md", "X-Mathesis-Kind": kind})
         front, _ = frontmatter.split((client.root / f"G/Course X/05-{kind}.md").read_text())
-        assert f'type: "{expected}"' in front and 'course: "Course X"' in front and f'lesson: "05-{kind}"' in front
+        assert f'type: "{expected}"' in front and 'course: "Course X"' in front
+        assert not any(l.startswith(("lesson:", "url:")) for l in front)      # nothing invented from the file name
     client.post("/write", content=b"x", headers={"X-File-Path": "G/C/06-a.md", "X-Mathesis-Meta": "not json"})
     assert frontmatter.split((client.root / "G/C/06-a.md").read_text())[0] is not None
 

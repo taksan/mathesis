@@ -50,7 +50,7 @@ hash: "sha256:..."         # of the text after the frontmatter
 ---
 ```
 
-The userscript sends the course, lesson and URL (`X-Mathesis-Meta`, percent-encoded JSON); the server adds the type and the hash (if the header is missing, the course is the folder name and the lesson the file name). The hash covers only what follows the frontmatter, so it changes when the body changes (for example when you type a note into it) and not when only the metadata does. JSON and raw HTML files get no frontmatter.
+The userscript sends the course, lesson and URL (`X-Mathesis-Meta`, percent-encoded JSON); the server adds the type and the hash (if the header is missing, the course is the folder name and there is no lesson or url until a later save sends them). The hash covers only what follows the frontmatter, so it changes when the body changes (for example when you type a note into it) and not when only the metadata does. JSON and raw HTML files get no frontmatter.
 
 Saving again over a file that **has** frontmatter updates our keys (and the hash), keeps any key you added, and replaces the body as before. Saving over a file that **has none** (a file saved before this existed, or one you wrote) does not overwrite it: the server only adds the frontmatter and leaves every other character as it was; the panel tells you ("kept": true in the answer). Summaries, `mathesis summarize` and the lesson matching ignore the frontmatter.
 

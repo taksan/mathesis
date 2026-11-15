@@ -209,7 +209,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def page_meta(raw: str | None, kind: str, target: Path) -> dict[str, str]:
         """Frontmatter values: the type from the kind, course / lesson / url from X-Mathesis-Meta (percent-encoded JSON, sent
-        by the userscript); the course and lesson fall back to the folder and the file name."""
+        by the userscript); without it the course is the folder name and there is no lesson or url."""
         sent = {}
         if raw:
             try:
@@ -217,8 +217,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 sent = {k: " ".join(str(data[k]).split())[:500] for k in ("course", "lesson", "url") if isinstance(data, dict) and data.get(k)}
             except ValueError:
                 pass  # not JSON: the file is still saved, with what the server can work out
+        # no lesson name is invented: a file name such as "01-incorrect" is not the lesson. Missing keys can be filled in by a later save.
         return {"type": FILE_TYPES[kind], "course": sent.get("course") or target.parent.name,
-                "lesson": sent.get("lesson") or target.stem, "url": sent.get("url", "")}
+                "lesson": sent.get("lesson", ""), "url": sent.get("url", "")}
 
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
