@@ -28,6 +28,8 @@ def _settings(args) -> Settings:
         overrides["pipeline"] = "single"
     if getattr(args, "no_revise", False):
         overrides["max_revisions"] = 0
+    if getattr(args, "no_llm", False):
+        overrides["llm"] = False
     if getattr(args, "no_summary", False):
         overrides["summarize"] = False
     if getattr(args, "no_lab_guide", False):
@@ -50,7 +52,7 @@ def cmd_serve(args) -> int:
     os.environ.update({
         "MATHESIS_VERSION_SHOWN": shown, "MATHESIS_HOST": s.host, "MATHESIS_PORT": str(s.port), "MATHESIS_ROOT": str(s.root),
         "MATHESIS_MODEL": s.model, "MATHESIS_OLLAMA_URL": s.ollama_url, "MATHESIS_NUM_CTX": str(s.num_ctx),
-        "MATHESIS_SUMMARIZE": "1" if s.summarize else "0", "MATHESIS_NOTIFY": "1" if s.notify else "0",
+        "MATHESIS_LLM": "1" if s.llm else "0", "MATHESIS_SUMMARIZE": "1" if s.summarize else "0", "MATHESIS_NOTIFY": "1" if s.notify else "0",
         "MATHESIS_LAB_GUIDE": "1" if s.lab_guide else "0", "MATHESIS_NOTIFY_ON_SAVE": "1" if s.notify_on_save else "0", "MATHESIS_PIPELINE": s.pipeline,
         "MATHESIS_MAX_REVISIONS": str(s.max_revisions), "MATHESIS_OBSIDIAN_OPEN": "1" if s.obsidian_open else "0",
         **({"MATHESIS_OBSIDIAN": s.obsidian_command} if s.obsidian_command else {}),
@@ -77,6 +79,9 @@ def _transcripts(paths) -> list[Path]:
 
 def cmd_summarize(args) -> int:
     s = _settings(args)
+    if not s.llm:
+        print("error: LLM features are off (llm = false, MATHESIS_LLM=0 or --no-llm)", file=sys.stderr)
+        return 1
     client = make_client(s, "summary")
     if client is None:
         print("error: no summary provider (summary.provider is \"none\")", file=sys.stderr)
@@ -122,6 +127,8 @@ def cmd_doctor(args) -> int:
         bad += ok is False
         print(f"[{mark}] {text}")
 
+    if not s.llm:
+        report(None, "LLM features are off (llm = false / MATHESIS_LLM=0): no summaries, no lab guides, no provider is checked")
     for name in s.unused_providers():
         report(None, f"[providers.{name}] is configured but not used: set provider = \"{name}\" at the top of the file")
     report(None if s.config_path is None else True,
@@ -193,6 +200,9 @@ def cmd_config(args) -> int:
     print(f"config file: {s.config_path or 'none'} (default location: {DEFAULT_CONFIG})")
     for name in s.unused_providers():
         print(f"warning: [providers.{name}] is configured but not used: set provider = \"{name}\" at the top of the file")
+    if not s.llm:
+        print("LLM features: off (llm = false / MATHESIS_LLM=0 / --no-llm): no summaries, no lab guides")
+        return 0
     print(f"default provider: {s.default_provider or 'none set (built-in: ollama for summaries, claude-code for lab guides)'}")
     for what, provider, model in [("summaries", s.summary_provider, s.summary_model), ("lab guides", s.lab_provider, s.lab_model)]:
         if provider == "none":
@@ -225,6 +235,7 @@ def build_parser() -> argparse.ArgumentParser:
     common(sv)
     sv.add_argument("--host"), sv.add_argument("--port", type=int)
     sv.add_argument("--no-reload", action="store_true", help="disable hot reload")
+    sv.add_argument("--no-llm", dest="no_llm", action="store_true", help="no LLM feature at all (no summaries, no lab guides): files are only saved")
     sv.add_argument("--no-summary", action="store_true", help="only save transcripts, no summaries")
     sv.add_argument("--no-lab-guide", dest="no_lab_guide", action="store_true", help="labs: no gcloud/terraform guide")
     sv.add_argument("--no-notify", action="store_true", help="no desktop notifications")

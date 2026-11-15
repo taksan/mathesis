@@ -91,6 +91,10 @@ def read_config(path: Path) -> dict:
             if not isinstance(value, str):
                 raise ConfigError(f"{path}: provider must be a name, e.g. provider = \"gemini\"")
             continue
+        if section == "llm":
+            if not isinstance(value, bool):
+                raise ConfigError(f"{path}: llm must be true or false, e.g. llm = false")
+            continue
         if section not in KNOWN_KEYS or not isinstance(value, dict):
             raise ConfigError(f"{path}: unknown section [{section}] (known: {', '.join(KNOWN_KEYS)}, providers.<name>)")
         unknown = set(value) - KNOWN_KEYS[section]
@@ -117,6 +121,7 @@ class Settings:
     model: str = "gemma4:12b"              # the Ollama model (every stage of the pipeline)
     embed_model: str = "bge-m3:latest"     # finds which lesson a quiz question comes from (always Ollama)
     num_ctx: int = 16384                   # Ollama's default (2048) would silently truncate transcripts
+    llm: bool = True                       # False: no LLM feature at all (summaries, lab guides); files are only saved
     summarize: bool = True
     notify: bool = True
     notify_on_save: bool = False           # also notify when the raw transcript is saved
@@ -140,11 +145,11 @@ class Settings:
 
     @property
     def summary_enabled(self) -> bool:
-        return self.summarize and self.summary_provider != "none"
+        return self.llm and self.summarize and self.summary_provider != "none"
 
     @property
     def lab_guide_enabled(self) -> bool:
-        return self.lab_guide and self.lab_provider != "none"
+        return self.llm and self.lab_guide and self.lab_provider != "none"
 
     def provider_spec(self, name: str, model: str | None = None) -> dict:
         """Everything needed to build the client of provider `name` (built-in defaults < settings < config tables)."""
@@ -177,9 +182,13 @@ class Settings:
 
     def unused_providers(self) -> list[str]:
         """Providers the file configures that neither summaries nor lab guides use (a forgotten `provider = ...` line)."""
+        if not self.llm:  # no LLM at all: the providers in the file are simply parked
+            return []
         return sorted(set(self.configured_providers) - {self.summary_provider, self.lab_provider})
 
     def validate(self) -> "Settings":
+        if not self.llm:  # nothing will call a provider, so a missing key or a typo in one does not matter
+            return self
         for provider in {self.default_provider, self.summary_provider, self.lab_provider} - {None, "none"}:
             self.provider_spec(provider)
         return self
@@ -217,6 +226,7 @@ class Settings:
             model=pick("MATHESIS_MODEL", ollama.get("model"), cls.model),
             embed_model=pick("MATHESIS_EMBED_MODEL", ollama.get("embed_model"), cls.embed_model),
             num_ctx=pick("MATHESIS_NUM_CTX", ollama.get("num_ctx"), cls.num_ctx, int),
+            llm=flag("MATHESIS_LLM", raw.get("llm"), True),
             summarize=flag("MATHESIS_SUMMARIZE", summary.get("enabled"), True),
             notify=flag("MATHESIS_NOTIFY", server.get("notify"), True),
             notify_on_save=flag("MATHESIS_NOTIFY_ON_SAVE", server.get("notify_on_save"), False),

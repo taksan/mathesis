@@ -168,3 +168,26 @@ def test_dotenv_provides_keys_but_never_overrides_the_environment(tmp_path, monk
     assert os.environ["GEMINI_API_KEY"] == "from-file" and s.port == 6123 and os.environ["OTHER_KEY"] == "from-env"
     monkeypatch.delenv("GEMINI_API_KEY")
     monkeypatch.delenv("MATHESIS_PORT")
+
+
+def test_llm_switch_turns_every_llm_feature_off(tmp_path, monkeypatch):
+    assert Settings.from_env().llm is True
+    f = write(tmp_path, 'llm = false\nprovider = "gemini"\n[providers.gemini]\nmodel = "x"\n')   # no GEMINI_API_KEY: must not matter
+    s = Settings.from_env(f)
+    assert s.llm is False and not s.summary_enabled and not s.lab_guide_enabled and s.unused_providers() == []
+    monkeypatch.setenv("MATHESIS_LLM", "0")
+    assert Settings.from_env().llm is False
+    monkeypatch.setenv("MATHESIS_LLM", "1")
+    assert Settings.from_env(f).llm is True
+
+
+def test_llm_must_be_a_boolean(tmp_path):
+    with pytest.raises(ConfigError, match="llm must be true or false"):
+        Settings.from_env(write(tmp_path, 'llm = "no"\n'))
+
+
+def test_no_llm_flag_and_summarize_refuses(capsys):
+    args = type("A", (), {"config": None, "no_llm": True, "paths": []})()
+    assert cli._settings(args).llm is False
+    assert cli.cmd_summarize(args) == 1
+    assert "LLM features are off" in capsys.readouterr().err

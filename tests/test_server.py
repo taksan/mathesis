@@ -292,3 +292,12 @@ def test_open_reports_a_missing_editor(client, monkeypatch):
     _put(client, "Udemy/C/02-all questions.json")
     r = client.post("/open", headers={"X-File-Path": "Udemy/C/02-all questions.json"})
     assert r.status_code == 501 and "MATHESIS_EDITOR" in r.json()["error"]
+
+
+def test_llm_off_starts_no_jobs_and_lists_no_pending_summary(tmp_path):
+    settings = Settings(root=tmp_path.resolve(), llm=False, notify=False, obsidian_command="obs")
+    with TestClient(server.create_app(settings)) as c:
+        h = {"X-File-Path": "G/C/01-Lab.md", "X-Mathesis-Kind": "lab"}
+        assert c.post("/write", content=b"lab text, plenty of words", headers=h).status_code == 200
+        kinds = [f["kind"] for f in c.get("/files", headers={"X-File-Path": "G/C/01-Lab.md"}).json()["files"]]
+        assert kinds == ["transcript"]                       # no pending summary, no pending lab guide

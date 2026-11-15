@@ -63,6 +63,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for name in settings.unused_providers():
             print(f"WARNING: [providers.{name}] is set in the config but is not the default provider nor a job's "
                   f"override, so it is not used (provider = \"{name}\" at the top of the file selects it)")
+        if not settings.llm:
+            print("LLM features: off (no summaries, no lab guides, no provider is contacted); files are only saved")
         complained = set()
         for role, enabled, what in [("summary", settings.summary_enabled, "Summaries"),
                                     ("lab_guide", settings.lab_guide_enabled, "Lab guides")]:
