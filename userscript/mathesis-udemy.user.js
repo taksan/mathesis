@@ -417,9 +417,7 @@
     #mathesis-panel button.mx-chip { height: 30px; padding: 0 12px; border-radius: 15px; background: transparent; color: #F2F0EB;
       border: 1px solid #46536a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
       transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
-    #mathesis-panel button.mx-chip.primary { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; font-weight: 600; }
     #mathesis-panel button.mx-chip:hover, #mathesis-panel .mx-ib:hover, #mathesis-panel .mx-name:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; }
-    #mathesis-panel button.mx-chip.primary:hover { background: #a9c8fa; border-color: #a9c8fa; }
     #mathesis-panel button.mx-chip:focus-visible, #mathesis-panel .mx-ib:focus-visible, #mathesis-panel .mx-name:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .mx-saved { width: 6px; height: 6px; border-radius: 50%; background: #34a853; flex: none; }
     .mx-file { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 4px 0 6px; border-radius: 6px; position: relative; }
@@ -558,7 +556,7 @@
 
   // The save chips of this page. Order: to review, all, json.
   const rowSpecs = () => (isQuizReview() ? [
-    { chip: 'to review', primary: true, kinds: ['incorrect'], save: () => copyLesson(false),
+    { chip: 'to review', kinds: ['incorrect'], save: () => copyLesson(false),
       tipOn: 'Saves the questions you got wrong or marked, with explanations, as NN-incorrect.md (the attempt is in the name for attempts after the first). Saving again replaces this attempt.',
       tipOff: 'Copies the questions you got wrong or marked, with explanations, to the clipboard. The server is offline, so nothing is saved.' },
     { chip: 'all', kinds: ['all'], save: () => copyLesson(true),
@@ -568,7 +566,7 @@
       tipOn: 'Saves every question as a JSON file (options, correct answers, explanations) for other tools. Overwrites the previous file.',
       tipOff: 'Copies every question as JSON to the clipboard. The server is offline, so nothing is saved.' },
   ] : [
-    { chip: 'transcript', primary: true, kinds: ['transcript'], save: () => copyLesson(false),
+    { chip: 'transcript', kinds: ['transcript'], save: () => copyLesson(false),
       tipOn: 'Saves the transcript of this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.',
       tipOff: 'Copies the transcript to the clipboard. The server is offline, so nothing is saved.' },
   ]);
@@ -754,7 +752,7 @@
     for (const spec of specs) {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'mx-chip' + (spec.primary ? ' primary' : '');
+      chip.className = 'mx-chip'; // all chips look alike: a highlighted one would read as the selected pill
       if (serverUp && files.some((f) => spec.kinds.includes(f.kind) && f.state === 'ready')) {
         const dot = document.createElement('span');
         dot.className = 'mx-saved';

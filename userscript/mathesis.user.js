@@ -255,9 +255,7 @@
     #mathesis-panel button.mx-chip { height: 30px; padding: 0 12px; border-radius: 15px; background: transparent; color: #F2F0EB;
       border: 1px solid #46536a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
       transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
-    #mathesis-panel button.mx-chip.primary { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; font-weight: 600; }
     #mathesis-panel button.mx-chip:hover, #mathesis-panel .mx-ib:hover, #mathesis-panel .mx-name:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; }
-    #mathesis-panel button.mx-chip.primary:hover { background: #a9c8fa; border-color: #a9c8fa; }
     #mathesis-panel button.mx-chip:focus-visible, #mathesis-panel .mx-ib:focus-visible, #mathesis-panel .mx-name:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .mx-saved { width: 6px; height: 6px; border-radius: 50%; background: #34a853; flex: none; }
     .mx-file { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 4px 0 6px; border-radius: 6px; position: relative; }
@@ -401,7 +399,7 @@
       : kind === 'Quiz' ? ['Saves this quiz as a Markdown note. Saving again overwrites it.', 'Copies this quiz to the clipboard.']
       : kind === 'Lesson' ? ['Saves this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.', 'Copies the lesson link to the clipboard.']
       : ['Saves the transcript of this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.', 'Copies the transcript to the clipboard.'];
-    return [{ chip: kind.toLowerCase(), primary: true, kinds: ['transcript'], save: saveFromPage,
+    return [{ chip: kind.toLowerCase(), kinds: ['transcript'], save: saveFromPage,
               tipOn: what[0], tipOff: what[1] + ' The server is offline, so nothing is saved.' }];
   };
   const pagePath = () => computePathToWrite();
@@ -585,7 +583,7 @@
     for (const spec of specs) {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'mx-chip' + (spec.primary ? ' primary' : '');
+      chip.className = 'mx-chip'; // all chips look alike: a highlighted one would read as the selected pill
       if (serverUp && files.some((f) => spec.kinds.includes(f.kind) && f.state === 'ready')) {
         const dot = document.createElement('span');
         dot.className = 'mx-saved';
