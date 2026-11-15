@@ -15,6 +15,8 @@
 (function () {
   'use strict';
 
+  const SERVER = 'http://127.0.0.1:5000';
+
   // Folder under the server's MATHESIS_ROOT (the server decides where that is on disk).
   const BASE_DIR = 'Google Skills';
 
