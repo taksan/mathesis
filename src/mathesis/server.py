@@ -3,10 +3,12 @@
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
               Header X-Mathesis-Meta: percent-encoded JSON {"course", "lesson", "url"} for the frontmatter (type and hash are the server's)
               Markdown files get YAML frontmatter (type, course, lesson, url, hash of the body). A file that already exists without
-              frontmatter is not overwritten: the frontmatter is added and the rest is left as it is ("kept": true in the answer)
+              frontmatter is not overwritten: the frontmatter is added and the rest is left as it is ("kept": true in the answer).
+              A file whose body no longer matches the hash in its frontmatter (the person added notes) is not overwritten either:
+              409 {"error", "code": "modified"} unless the request has X-Mathesis-Overwrite: yes
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
-GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
+GET  /status  Header X-File-Path: -> {"exists": bool, "modified": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
 GET  /files   Header X-File-Path: the page's main file -> {"files": [{kind, label, state "ready"|"pending"|"failed", path, opener "obsidian"|"editor", obsidian_uri?, attempt?, error?}]}
               every document of the page: transcript, summary, lab guide (pending / failed while the background job runs), or for a quiz
               result the review attempts, "all questions" and its JSON
@@ -41,8 +43,8 @@ from .userscripts import list_scripts, render_page
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, message: str):
-        self.status, self.message = status, message
+    def __init__(self, status: int, message: str, code: str | None = None):
+        self.status, self.message, self.code = status, message, code
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -87,13 +89,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind", "X-Mathesis-Meta"],
+        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind", "X-Mathesis-Meta", "X-Mathesis-Overwrite"],
         allow_private_network=True,  # Chrome's Private Network Access preflight (public site -> 127.0.0.1)
     )
 
     @app.exception_handler(ApiError)
     async def api_error_handler(request: Request, exc: ApiError):
-        return JSONResponse({"error": exc.message}, status_code=exc.status)
+        return JSONResponse({"error": exc.message, **({"code": exc.code} if exc.code else {})}, status_code=exc.status)
 
     def target_path(raw_path: str | None) -> Path:
         """X-File-Path is relative to the configured root ("Google Skills/Path/Course/01-Lesson.md")."""
@@ -165,7 +167,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target = target_path(x_file_path)
         exists, summary = target.is_file(), summary_path(target)
         obsidian = have_obsidian(settings)
-        return {"exists": exists, "summary_exists": summary.is_file(), "opener": "obsidian" if obsidian else "editor",
+        modified = False
+        if exists and target.suffix == ".md":
+            try:
+                modified = frontmatter.is_modified(target.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
+                pass
+        return {"exists": exists, "modified": modified, "summary_exists": summary.is_file(), "opener": "obsidian" if obsidian else "editor",
                 "obsidian_uri": uri_for(summary if summary.is_file() else target) if exists and obsidian else None}
 
     def listing(target: Path) -> list[dict]:
@@ -213,7 +221,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
-                    x_mathesis_kind: str | None = Header(None), x_mathesis_meta: str | None = Header(None)):
+                    x_mathesis_kind: str | None = Header(None), x_mathesis_meta: str | None = Header(None),
+                    x_mathesis_overwrite: str | None = Header(None)):
         """X-Mathesis-Kind: "transcript" (default) is summarized; "quiz" is only saved."""
         target = target_path(x_file_path)
         kind = (x_mathesis_kind or "transcript").strip().lower()
@@ -230,6 +239,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if kind in FILE_TYPES and target.suffix == ".md":  # frontmatter: type, course, lesson, url, hash of the body
             try:
                 existing = target.read_text(encoding="utf-8") if target.is_file() else None
+                if existing is not None and frontmatter.is_modified(existing) and (x_mathesis_overwrite or "").lower() != "yes":
+                    raise ApiError(409, "this file was changed after it was saved (your notes?): saving would overwrite them", "modified")
                 text, kept = frontmatter.apply(existing, content.decode("utf-8"), page_meta(x_mathesis_meta, kind, target))
                 written = text.encode("utf-8")
             except UnicodeDecodeError:

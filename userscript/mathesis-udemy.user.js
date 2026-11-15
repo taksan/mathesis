@@ -807,7 +807,7 @@
 
   // Saving the Incorrect + To Review file when it is already saved: ask whether to overwrite it or keep it and save this one
   // as another attempt ("NN-incorrect (attempt 2).md"). Resolves to 'overwrite', 'keep' or 'cancel'.
-  function askOverwriteOrKeep(existingName, newName) {
+  function askOverwriteOrKeep(existingName, newName, modified) {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.id = 'mathesis-dialog';
@@ -819,7 +819,8 @@
       heading.textContent = `“${existingName}” is already saved.`;
       const sub = document.createElement('div');
       sub.className = 'sub';
-      sub.textContent = 'Overwrite it, or keep it and save this one as another attempt?';
+      sub.textContent = (modified ? 'You changed it after it was saved (your notes?): overwriting will lose those changes. ' : '')
+        + 'Overwrite it, or keep it and save this one as another attempt?';
       const choose = (value) => { document.removeEventListener('keydown', onKey, true); overlay.remove(); resolve(value); };
       const make = (label, value, cls) => {
         const b = document.createElement('button');
@@ -845,17 +846,17 @@
   // The path to save a quiz result to: the given one when it is free, otherwise whatever the person chooses.
   // Returns null when they cancel. The new attempt number is the page's ("Attempt 2"), or the next free one.
   async function chooseTarget(path) {
-    let exists;
-    try { exists = (await statusOf(path)).exists; } catch (e) { return path; } // server unreachable: the save itself reports it
-    if (!exists) return path;
+    let exists, modified = false;
+    try { const st = await statusOf(path); exists = st.exists; modified = !!st.modified; } catch (e) { return { path }; } // server unreachable: the save itself reports it
+    if (!exists) return { path };
     const shown = parseInt((attemptLabel().match(/\d+/) || [])[0], 10);
     let candidate;
     for (let n = shown >= 2 ? shown : 2; n < 100; n++) {
       candidate = withAttempt(path, n);
       try { if (!(await statusOf(candidate)).exists) break; } catch (e) { break; }
     }
-    const choice = await askOverwriteOrKeep(path.split('/').pop(), candidate.split('/').pop());
-    return choice === 'cancel' ? null : choice === 'keep' ? candidate : path;
+    const choice = await askOverwriteOrKeep(path.split('/').pop(), candidate.split('/').pop(), modified);
+    return choice === 'cancel' ? null : choice === 'keep' ? { path: candidate } : { path, overwrite: true }; // asked, so the server need not ask again
   }
 
   async function copyLesson(allQuestions = false) {
@@ -883,24 +884,35 @@
       .catch((error) => alert('Could not copy text to clipboard: ' + error));
     if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
 
+    let confirmed = false; // true once the person agreed to overwrite a file they had changed
     // Incorrect + To Review depends on the attempt, so saving it again asks: overwrite, or keep both as another attempt.
     // "All questions" (Markdown and JSON) is the same whatever the attempt, so it is simply overwritten.
     if (kind === 'quiz-review') {
-      filePath = await chooseTarget(filePath);
-      if (!filePath) return;
+      const target = await chooseTarget(filePath);
+      if (!target) return;
+      filePath = target.path;
+      confirmed = !!target.overwrite;
     }
 
-    fetch(`${SERVER}/write`, {
+    const send = (overwrite) => fetch(`${SERVER}/write`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader() },
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader(),
+                 ...(overwrite ? { 'X-Mathesis-Overwrite': 'yes' } : {}) },
       body: text,
     })
       .then((response) => {
-        if (!response.ok) { // show the server's reason (it answers {"error": "..."})
-          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status }); });
+        if (!response.ok) { // show the server's reason (it answers {"error": "...", "code": "..."})
+          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status, code: d.code }); });
         }
         return response.json();
       })
+      .catch((error) => {
+        // the file has notes in it (its body no longer matches the hash in its frontmatter): ask, then save over them
+        if (error.code !== 'modified') throw error;
+        if (confirm('The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?')) return send(true);
+        throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
+      });
+    send(confirmed)
       .then((data) => {
         console.log('[Mathesis] saved', data);
         refreshFiles();
@@ -913,6 +925,7 @@
           : kind === 'quiz-all' ? 'All questions saved!' : 'Transcript sent successfully!');
       })
       .catch(async (error) => {
+        if (error.cancelled) return;
         console.error('Error:', error);
         if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });

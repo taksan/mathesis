@@ -25,7 +25,7 @@ def client(tmp_path):
 def test_write_creates_missing_directories_and_status_reflects_it(client):
     target = client.root / "Path" / "Course" / "01-Lesson.md"
     h = {"X-File-Path": "Path/Course/01-Lesson.md"}
-    assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False, "opener": "obsidian", "obsidian_uri": None}
+    assert client.get("/status", headers=h).json() == {"exists": False, "modified": False, "summary_exists": False, "opener": "obsidian", "obsidian_uri": None}
     r = client.post("/write", content="# Lesson\nhello".encode(), headers=h)
     assert r.status_code == 200 and r.json()["bytes"] == 14 and r.json()["path"] == "Path/Course/01-Lesson.md"
     assert body(target) == "# Lesson\nhello"
@@ -395,3 +395,29 @@ def test_the_hash_ignores_the_frontmatter():
     c, _ = frontmatter.apply(a, "different body\n", {})
     assert hash_of(c) != hash_of(a)
     assert frontmatter.split("---\nno end\n")[0] is None                    # an unclosed block is not frontmatter
+
+
+def test_a_file_edited_after_saving_asks_before_it_is_overwritten(client):
+    h = {"X-File-Path": "Udemy/Curso/02-incorrect.md", "X-Mathesis-Kind": "quiz-review"}
+    assert client.post("/write", content=b"# first\n", headers=h).status_code == 200
+    f = client.root / "Udemy/Curso/02-incorrect.md"
+    assert client.get("/status", headers=h).json()["modified"] is False
+    assert client.post("/write", content=b"# again\n", headers=h).status_code == 200      # untouched file: no warning
+    f.write_text(f.read_text() + "\nMy note: remember this.\n")
+    assert client.get("/status", headers=h).json()["modified"] is True
+    r = client.post("/write", content=b"# newest\n", headers=h)
+    assert r.status_code == 409 and r.json()["code"] == "modified"
+    assert "My note" in f.read_text()                                                      # nothing was overwritten
+    ok = client.post("/write", content=b"# newest\n", headers={**h, "X-Mathesis-Overwrite": "yes"})
+    assert ok.status_code == 200 and body(f) == "# newest\n"
+    assert client.get("/status", headers=h).json()["modified"] is False
+
+
+def test_only_a_changed_body_counts_as_an_edit():
+    text, _ = frontmatter.apply(None, "body\n", {"type": "lab"})
+    assert not frontmatter.is_modified(text)
+    assert not frontmatter.is_modified(text.rstrip("\n"))                                  # an editor dropped the last newline
+    assert not frontmatter.is_modified(text.replace('type: "lab"', 'type: "lab"\nmine: 1'))  # only the metadata changed
+    assert frontmatter.is_modified(text + "a note\n")
+    assert frontmatter.is_modified("---\ntype: x\n---\nbody\n")                            # frontmatter without a hash
+    assert not frontmatter.is_modified("# plain file\n")                                   # no frontmatter: never overwritten anyway

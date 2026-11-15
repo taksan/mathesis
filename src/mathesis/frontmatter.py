@@ -27,7 +27,23 @@ def strip(text: str) -> str:
 
 
 def body_hash(body: str) -> str:
-    return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+    """Hash of the body. Line endings and trailing whitespace are ignored, so an editor that adds or drops the final newline does
+    not look like an edit."""
+    return "sha256:" + hashlib.sha256(body.replace("\r\n", "\n").rstrip().encode("utf-8")).hexdigest()
+
+
+def is_modified(text: str) -> bool:
+    """True when the body no longer matches the hash stored in the frontmatter: the person edited the file since the server wrote
+    it (their notes). Frontmatter without a hash counts as modified, since there is nothing to compare with. A file with no
+    frontmatter is not "modified": it is never overwritten (see `apply`)."""
+    front, body = split(text)
+    if front is None:
+        return False
+    for line in front:
+        m = re.match(r'hash\s*:\s*"?([^"\s]*)"?\s*$', line)
+        if m:
+            return m.group(1) != body_hash(body)
+    return True
 
 
 def _line(key: str, value: str) -> str:

@@ -656,17 +656,25 @@
       .catch((error) => alert('Could not copy text to clipboard: ' + error));
     if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
 
-    fetch('http://127.0.0.1:5000/write', {
+    const send = (overwrite) => fetch('http://127.0.0.1:5000/write', {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader() },
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader(),
+                 ...(overwrite ? { 'X-Mathesis-Overwrite': 'yes' } : {}) },
       body: text,
     })
       .then((response) => {
-        if (!response.ok) { // show the server's reason (it answers {"error": "..."})
-          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status }); });
+        if (!response.ok) { // show the server's reason (it answers {"error": "...", "code": "..."})
+          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status, code: d.code }); });
         }
         return response.json();
       })
+      .catch((error) => {
+        // the file has notes in it (its body no longer matches the hash in its frontmatter): ask, then save over them
+        if (error.code !== 'modified') throw error;
+        if (confirm('The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?')) return send(true);
+        throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
+      });
+    send(false)
       .then((data) => {
         console.log('Success:', data);
         refreshFiles();
@@ -681,6 +689,7 @@
           : 'Transcript sent successfully!');
       })
       .catch(async (error) => {
+        if (error.cancelled) return;
         console.error('Error:', error);
         if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });

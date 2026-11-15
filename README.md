@@ -54,6 +54,8 @@ The userscript sends the course, lesson and URL (`X-Mathesis-Meta`, percent-enco
 
 Saving again over a file that **has** frontmatter updates our keys (and the hash), keeps any key you added, and replaces the body as before. Saving over a file that **has none** (a file saved before this existed, or one you wrote) does not overwrite it: the server only adds the frontmatter and leaves every other character as it was; the panel tells you ("kept": true in the answer). Summaries, `mathesis summarize` and the lesson matching ignore the frontmatter.
 
+**Notes are protected.** The hash tells the server whether you edited a file after it wrote it (line endings and a missing final newline do not count). When you save over such a file, the server answers `409` (`code: "modified"`, `/status` also reports `"modified": true`) and does not overwrite it. The userscript then asks: "The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?" Yes saves over them (the request is repeated with `X-Mathesis-Overwrite: yes`); No leaves the file alone and shows no error. For "to Review", the overwrite / keep both dialog already asks, and says that you changed the file; "Overwrite" there counts as the confirmation. Frontmatter without a hash counts as changed.
+
 When a save fails, the userscript also uploads an **error report** (`POST /reports`): the page HTML, the URL, what was sent, the server's error and the script version. The alert shows the report ID. Reports are kept in a temporary folder (`MATHESIS_REPORT_DIR`, default `<tmp>/mathesis-reports`, newest 50) and can be inspected through the API:
 
 ```
