@@ -414,7 +414,7 @@
   // Server found: the buttons save. Server not found: they only copy to the clipboard and never try to reach it.
   let serverUp = true;
   const verb = () => (serverUp ? 'Save' : 'Copy');
-  const LABEL = () => `${verb()} ${isQuizReview() ? 'Incorrect + To Review' : 'Transcript'}`;
+  const LABEL = () => `${verb()} ${isQuizReview() ? 'to Review' : 'Transcript'}`;
   button.textContent = LABEL();
 
   // One small panel instead of loose buttons: a header (status dot, name, fold), the main action, a status line,
