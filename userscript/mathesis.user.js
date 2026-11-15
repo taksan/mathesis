@@ -195,7 +195,7 @@
   style.textContent = `
     #mathesis-panel {
       position: fixed; top: 72px; right: 10px; z-index: 2147483647;
-      width: 208px; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+      width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px;
       background: #202124; color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
@@ -227,18 +227,41 @@
     #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #5f6368; }
     #mathesis-panel button.ghost:hover, #mathesis-panel.saved button.primary:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
     #mathesis-panel button.ghost.saved { border-color: #34a853; color: #81c995; }
+
+    #mathesis-rows { display: grid; grid-template-columns: max-content 66px; gap: 6px; }
+    #mathesis-rows:empty { display: none; }
+    #mathesis-panel.loading #mathesis-rows { display: none; }
+    .mx-cell { position: relative; min-width: 0; }
+    #mathesis-panel .mx-cell button.mx { width: 100%; height: 36px; padding: 0 16px; white-space: nowrap; }
+    #mathesis-panel .mx-cell button.mx.open { padding: 0 6px; background: transparent; color: #7fe0d9; border: 1px solid #0b9a93; }
+    #mathesis-panel .mx-cell button.mx.open:hover { background: rgba(11, 154, 147, 0.15); }
+    .mx-tip { position: absolute; bottom: calc(100% + 6px); width: 230px; max-width: calc(100vw - 32px); padding: 7px 9px;
+      background: #000; color: #fff; border: 1px solid #5f6368; border-radius: 6px; font-size: 12px; line-height: 1.4;
+      pointer-events: none; opacity: 0; transition: opacity 0.12s; z-index: 3; text-align: left; white-space: normal; }
+    .mx-cell.l .mx-tip { left: 0; } .mx-cell.r .mx-tip { right: 0; }
+    .mx-cell:hover .mx-tip, .mx-cell:focus-within .mx-tip { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { .mx-tip { transition: none; } }
+    .mx-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #202124;
+      display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    .mx-spin { display: inline-block; flex: none; width: 11px; height: 11px; border: 2px solid #5f6368; border-top-color: #7fe0d9;
+      border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; vertical-align: middle; }
+    @media (prefers-reduced-motion: reduce) { .mx-spin { animation: none; } }
+    .mx-menu { position: absolute; right: 0; top: 100%; margin-top: 4px; min-width: 200px; padding: 4px; z-index: 4;
+      background: #2b2d30; border: 1px solid #5f6368; border-radius: 8px; }
+    .mx-menu[hidden] { display: none !important; }
+    #mathesis-panel .mx-menu button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%;
+      padding: 6px 8px; background: transparent; border: 0; border-radius: 5px; color: #e8eaed; text-align: left; cursor: pointer; }
+    #mathesis-panel .mx-menu button:hover, #mathesis-panel .mx-menu button:focus-visible { background: #3c4043; outline: none; }
+    #mathesis-panel .mx-menu button[aria-disabled="true"] { color: #8a8f94; cursor: default; }
+    #mathesis-panel .mx-menu button[aria-disabled="true"]:hover { background: transparent; }
+    .mx-via { color: #9aa0a6; font-size: 11px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+    .mx-via.fail { color: #f28b82; }
+    #mathesis-status:empty, #mathesis-note:empty { display: none; }
+    #mathesis-note { color: #bdc1c6; font-size: 12px; max-width: 280px; }
+    #mathesis-retry { background: none; border: 0; padding: 0; color: #8ab4f8; text-decoration: underline; cursor: pointer; font-size: 12px; }
+    #mathesis-retry[disabled] { color: #9aa0a6; text-decoration: none; cursor: default; }
   `;
   document.head.appendChild(style);
-
-  const button = document.createElement('button');
-  button.id = 'copy-transcript-btn';
-  button.type = 'button';
-  button.className = 'mx primary';
-  // Server found: the buttons save. Server not found: they only copy to the clipboard and never try to reach it.
-  let serverUp = true;
-  const verb = () => (serverUp ? 'Save' : 'Copy');
-  const LABEL = () => `${verb()} ${isQuiz() ? 'Quiz' : isBundle() ? 'Lesson' : isLab() ? 'Lab' : 'Transcript'}`;
-  button.textContent = LABEL();
 
   // One small panel instead of loose buttons: a header (status dot, name, fold), the main action, a status line,
   // then the secondary actions. Amber dot = not saved yet, green = saved, grey = server unreachable.
@@ -342,47 +365,202 @@
   };
   setLoading();
 
-  // Show whether this lesson was already saved (green) or not (red); grey = server unreachable.
-
-  // Second button, only while this lesson is saved: opens the summary (or the lesson) in Obsidian.
-  // The server builds the obsidian:// link, so no local path lives in this script.
-  const openButton = document.createElement('button');
-  openButton.id = 'open-obsidian-btn';
-  openButton.type = 'button';
-  openButton.className = 'mx ghost';
-  openButton.textContent = 'Open in Obsidian';
-  openButton.style.display = 'none';
-  let lessonSaved = false;
-  const syncOpenButton = () => {
-    openButton.style.display = lessonSaved && panel.style.display !== 'none' ? '' : 'none';
+  const pageKind = () => (isQuiz() ? 'Quiz' : isBundle() ? 'Lesson' : isLab() ? 'Lab' : 'Transcript');
+  const rowSpecs = () => {
+    const kind = pageKind();
+    const what = kind === 'Lab' ? ['Saves the lab instructions as a note, then writes a summary and a gcloud/Terraform lab guide in the background. Saving again overwrites them.',
+                                   'Copies the lab instructions to the clipboard.']
+      : kind === 'Quiz' ? ['Saves this quiz as a Markdown note. Saving again overwrites it.', 'Copies this quiz to the clipboard.']
+      : kind === 'Lesson' ? ['Saves this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.', 'Copies the lesson link to the clipboard.']
+      : ['Saves the transcript of this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.', 'Copies the transcript to the clipboard.'];
+    return [{ label: kind, primary: true, kinds: ['lab-guide', 'summary', 'transcript'], save: saveFromPage,
+              tipOn: what[0], tipOff: what[1] + ' The server is offline, so nothing is saved.' }];
   };
-  openButton.addEventListener('click', () => {
-    let filePath;
-    try { filePath = computePathToWrite(); } catch (e) { return; }
-    fetch('http://127.0.0.1:5000/status', { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.obsidian_uri) window.location.href = d.obsidian_uri;
-        else if (d.exists) { // Obsidian is not installed: the server opens the file in a text editor
-          return fetch('http://127.0.0.1:5000/open', { method: 'POST', headers: { 'X-File-Path': encodeURIComponent(filePath) } })
-            .then((r) => r.json().then((j) => { if (!r.ok) alert(j.error || 'Could not open the file'); }));
-        } else alert('This lesson is not saved yet');
-      })
-      .catch((error) => alert('Could not reach the Mathesis server: ' + error));
-  });
+  const pagePath = () => computePathToWrite();
 
-  let current = { state: 'new', summaryDone: false };
-  function setButtonState(state, summaryDone) {
+  // ---- rows: one per kind of file, Save on the left, Open on the right (only once that file exists) ----
+  // `rowSpecs()` and `pagePath()` come from the page type (below). The server (GET /files) says what exists, what is still
+  // being written (summary, lab guide) and which program opens each file, so this script never guesses a file name.
+  let serverUp = true;        // false: the buttons say "Copy" and only copy to the clipboard; nothing is sent
+  const verb = () => (serverUp ? 'Save' : 'Copy');
+  let files = [];             // answer of GET /files for this page
+  let lastChecked = null, pollTimer = null, noteTimer = null, renderKey = '';
+  const rowsEl = document.createElement('div');
+  rowsEl.id = 'mathesis-rows';
+  const noteEl = document.createElement('div');
+  noteEl.id = 'mathesis-note';
+  noteEl.setAttribute('role', 'status');
+  const say = (message) => {
+    noteEl.textContent = message;
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { noteEl.textContent = ''; }, 8000);
+  };
+  const closeMenus = () => {
+    rowsEl.querySelectorAll('.mx-menu').forEach((m) => { m.hidden = true; });
+    rowsEl.querySelectorAll('[aria-expanded]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  };
+  document.addEventListener('click', closeMenus);
+
+  function withTip(cell, button, text) {
+    button.setAttribute('aria-label', button.textContent + '. ' + text);
+    const tip = document.createElement('div');
+    tip.className = 'mx-tip';
+    tip.setAttribute('aria-hidden', 'true');
+    tip.textContent = text;
+    cell.append(button, tip);
+  }
+
+  const NAMES = { incorrect: 'the review', all: 'all questions', json: 'the JSON file', summary: 'the summary', transcript: 'the transcript', 'lab-guide': 'the lab guide' };
+  const nameOf = (f) => NAMES[f.kind] || f.label.toLowerCase();
+
+  async function openFile(f) {
+    if (f.state === 'pending') return;
+    if (f.state === 'failed') { say(`The ${nameOf(f).replace(/^the /, '')} was not written (${f.error || 'see the server log'}). Save again to retry.`); return; }
+    if (f.opener === 'obsidian' && f.obsidian_uri) { window.location.href = f.obsidian_uri; return; }
+    try { // a program on the server machine opens it (the text editor)
+      const r = await fetch(`${SERVER}/open`, { method: 'POST', headers: { 'X-File-Path': encodeURIComponent(f.path) } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || r.status + ' ' + r.statusText);
+    } catch (e) {
+      navigator.clipboard.writeText(f.path).catch(() => {});
+      say(`Could not open it: ${e.message}. The path was copied.`);
+    }
+  }
+
+  function renderRows() {
+    const specs = rowSpecs();
+    const key = JSON.stringify([serverUp, files, specs.map((s) => s.label)]);
+    if (key === renderKey) return;
+    renderKey = key;
+    rowsEl.textContent = '';
+    for (const spec of specs) {
+      const left = document.createElement('div');
+      left.className = 'mx-cell l';
+      const save = document.createElement('button');
+      save.type = 'button';
+      save.className = 'mx ' + (spec.primary ? 'primary' : 'ghost');
+      save.textContent = `${verb()} ${spec.label}`;
+      save.addEventListener('click', spec.save);
+      withTip(left, save, serverUp ? spec.tipOn : spec.tipOff);
+      const right = document.createElement('div');
+      right.className = 'mx-cell r';
+      const items = serverUp ? files.filter((f) => spec.kinds.includes(f.kind)) : [];
+      if (items.length) {
+        const many = items.length > 1;
+        const waiting = items.some((f) => f.state === 'pending');
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'mx open';
+        open.textContent = many ? 'Open ▾' : 'Open';
+        const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
+        withTip(right, open, many ? 'Choose what to open.' + (waiting ? ' Greyed-out documents are still being written.' : '')
+          : `Opens ${nameOf(items[0])} in ${via(items[0])}.`);
+        if (waiting) {
+          const badge = document.createElement('span');
+          badge.className = 'mx-badge';
+          badge.innerHTML = '<span class="mx-spin"></span>';
+          right.append(badge);
+        }
+        if (!many) {
+          open.addEventListener('click', () => openFile(items[0]));
+        } else {
+          open.setAttribute('aria-haspopup', 'menu');
+          open.setAttribute('aria-expanded', 'false');
+          const menu = document.createElement('div');
+          menu.className = 'mx-menu';
+          menu.hidden = true;
+          menu.setAttribute('role', 'menu');
+          for (const f of items) {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.setAttribute('role', 'menuitem');
+            const name = document.createElement('span');
+            name.textContent = f.label + (f.attempt && f === items[0] ? ' (newest)' : '');
+            const side = document.createElement('span');
+            side.className = 'mx-via';
+            if (f.state === 'pending') {
+              item.setAttribute('aria-disabled', 'true');
+              side.innerHTML = 'writing… <span class="mx-spin"></span>';
+            } else if (f.state === 'failed') {
+              side.classList.add('fail');
+              side.textContent = 'failed';
+            } else {
+              side.textContent = via(f).replace('your text editor', 'editor');
+            }
+            item.append(name, side);
+            item.addEventListener('click', () => { closeMenus(); openFile(f); });
+            menu.append(item);
+          }
+          open.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasHidden = menu.hidden;
+            closeMenus();
+            menu.hidden = !wasHidden;
+            open.setAttribute('aria-expanded', String(wasHidden));
+            if (wasHidden) menu.querySelector('button').focus();
+          });
+          menu.addEventListener('keydown', (e) => {
+            const all = [...menu.querySelectorAll('button')];
+            const i = all.indexOf(document.activeElement);
+            if (e.key === 'ArrowDown') { e.preventDefault(); all[(i + 1) % all.length].focus(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); all[(i - 1 + all.length) % all.length].focus(); }
+            else if (e.key === 'Escape') { closeMenus(); open.focus(); }
+          });
+          right.append(menu);
+        }
+      }
+      rowsEl.append(left, right);
+    }
+  }
+
+  // Server offline: the only status text there is, with a retry link just after it.
+  function showStatus(offline, again) {
+    statusEl.textContent = '';
+    if (!offline) return;
+    statusEl.append(document.createTextNode(again ? 'Server still offline ' : 'Server offline '));
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.id = 'mathesis-retry';
+    retry.textContent = '(retry)';
+    retry.addEventListener('click', () => {
+      retry.disabled = true;
+      retry.textContent = '(checking…)';
+      refreshFiles(true);
+    });
+    statusEl.append(retry);
+  }
+
+  function settle(up, list, again) {
     panel.classList.remove('loading');
-    current = { state, summaryDone };
-    serverUp = state !== 'unknown';
-    lessonSaved = state === 'saved';
-    syncOpenButton();
-    panel.classList.toggle('saved', state === 'saved');
-    panel.classList.toggle('unknown', state === 'unknown');
-    button.textContent = state === 'saved' ? `${verb()} again` : LABEL();
-    statusEl.textContent = state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` :
-      state === 'unknown' ? 'Server offline' : 'Not saved yet';
+    serverUp = up;
+    files = list;
+    panel.classList.toggle('unknown', !up);
+    panel.classList.toggle('saved', files.some((f) => f.state === 'ready'));
+    showStatus(!up, again);
+    renderRows();
+    clearTimeout(pollTimer);
+    // a summary or lab guide is being written: ask again until it is done
+    if (up && files.some((f) => f.state === 'pending')) pollTimer = setTimeout(() => { lastChecked = null; }, 3000);
+  }
+
+  let wasOffline = false;
+  function refreshFiles(retry = false) {
+    let filePath;
+    try { filePath = pagePath(); } catch (e) { // page still loading; retried below
+      if (Date.now() - pageStart > SETTLE_MS) settle(true, []);
+      return;
+    }
+    lastChecked = filePath;
+    return fetch(`${SERVER}/files`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
+      .then((r) => r.json())
+      .then((d) => { if (lastChecked === filePath) { wasOffline = false; settle(true, d.files || []); } })
+      .catch(() => {
+        // The server may just be busy or restarting (or the request was cut by a navigation): show it, then check again
+        if (lastChecked !== filePath) return;
+        settle(false, [], retry || wasOffline);
+        wasOffline = true;
+        setTimeout(() => { if (lastChecked === filePath) lastChecked = null; }, 3000); // the 1 s timer below retries
+      });
   }
 
   const pageReady = () => {
@@ -390,30 +568,6 @@
     try { computePathToWrite(); } catch (e) { return false; }
     return !!document.querySelector('ql-quiz, ql-youtube-video, .lab-content-container') || !!bundleSrc(); // page type known
   };
-
-  let lastChecked = null;
-  function refreshStatus() {
-    let filePath;
-    try {
-      filePath = computePathToWrite();
-    } catch (e) { // page still loading; the interval below will retry
-      if (Date.now() - pageStart > SETTLE_MS) setButtonState('new');
-      return;
-    }
-    lastChecked = filePath;
-    fetch('http://127.0.0.1:5000/status', { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
-      .then((r) => r.json())
-      .then((d) => {
-        openButton.textContent = d.opener === 'editor' ? 'Open in editor' : 'Open in Obsidian';
-        if (lastChecked === filePath) setButtonState(d.exists ? 'saved' : 'new', d.summary_exists);
-      })
-      .catch(() => {
-        // The server may just be busy or restarting (or the request was cut by a navigation): show it, then check again
-        if (lastChecked !== filePath) return;
-        setButtonState('unknown');
-        setTimeout(() => { if (lastChecked === filePath) lastChecked = null; }, 3000); // the 1 s timer below retries
-      });
-  }
 
   // A failed save uploads the page and the failure to the server (POST /reports) and returns the report ID, or null
   // when even that is not possible (server unreachable). The ID lets the problem be inspected later with GET /reports/<id>.
@@ -433,7 +587,7 @@
       .catch(() => null);
   }
 
-  button.addEventListener('click', () => {
+  function saveFromPage() {
     let kind = isQuiz() ? 'quiz' : isBundle() ? 'bundle' : isLab() ? 'lab' : 'transcript';
     let text = getTranscript();
     let filePath;
@@ -471,7 +625,7 @@
       })
       .then((data) => {
         console.log('Success:', data);
-        if (kind !== 'raw') setButtonState('saved', false);
+        refreshFiles();
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz' ? 'Quiz saved!'
           : kind === 'bundle' ? 'Lesson converted and saved!'
@@ -484,7 +638,7 @@
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
         alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
-  });
+  }
 
   // Double Shift shows/hides the button (remembered per site). Any other key between the two presses cancels it.
   const HIDE_KEY = 'mathesis-button-hidden';
@@ -492,7 +646,7 @@
     get() { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch (e) { return false; } },
     set(hidden) { try { localStorage.setItem(HIDE_KEY, hidden ? '1' : '0'); } catch (e) { /* storage blocked: not remembered */ } },
   };
-  const applyHidden = (hidden) => { panel.style.display = hidden ? 'none' : ''; syncOpenButton(); };
+  const applyHidden = (hidden) => { panel.style.display = hidden ? 'none' : ''; };
   applyHidden(store.get());
   let lastShift = 0;
   window.addEventListener('keydown', (e) => {
@@ -509,7 +663,7 @@
     }
   }, true);
 
-  panel.append(head, button, statusEl, openButton);
+  panel.append(head, rowsEl, statusEl, noteEl);
   (document.body || document.documentElement).appendChild(panel);
   console.log('[Mathesis] button added');
 
@@ -533,7 +687,7 @@
   })();
 
   // Check now, and again whenever the lesson changes (the site may navigate without a reload).
-  if (pageReady()) refreshStatus();
+  if (pageReady()) refreshFiles();
   let lastUrl = location.href;
   setInterval(() => {
     if (location.href !== lastUrl) {
@@ -545,12 +699,11 @@
     // The page type can change without a URL change (Udemy renders the quiz results after the page loads): the file this
     // page maps to changes then, so ask the server again instead of keeping the answer for the old file.
     try { if (lastChecked !== null && computePathToWrite() !== lastChecked) { lastChecked = null; setLoading(); } } catch (e) { /* still loading */ }
-    if (lastChecked === null && pageReady()) refreshStatus();
+    if (lastChecked === null && pageReady()) refreshFiles();
     // The site may replace <body> (the buttons vanish) and the lesson iframe appears after the page loads (the label changes)
     const root = document.body || document.documentElement;
     if (!panel.isConnected) root.appendChild(panel);
     clampPos(); // the panel grows and shrinks with its state: keep it inside the window
-    const label = LABEL();
-    if (current.state === 'new' && !panel.classList.contains('loading') && button.textContent !== label) setButtonState('new');
+    renderRows(); // the page type (and so the label) can change without a new answer from the server
   }, 1000);
 })();

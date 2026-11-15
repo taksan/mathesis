@@ -4,8 +4,10 @@ POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body:
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
-POST /open    Header X-File-Path: opens the summary (or the lesson) in a text editor on the server machine (used when Obsidian is missing)
-              (obsidian_uri opens the summary if there is one, else the file; null when the file does not exist or Obsidian is not installed)
+GET  /files   Header X-File-Path: the page's main file -> {"files": [{kind, label, state "ready"|"pending"|"failed", path, opener "obsidian"|"editor", obsidian_uri?, attempt?, error?}]}
+              every document of the page: transcript, summary, lab guide (pending / failed while the background job runs), or for a quiz
+              result the review attempts, "all questions" and its JSON
+POST /open    Header X-File-Path: one path from /files: opens it in a text editor on the server machine (the "editor" opener)
 POST /reports  JSON {url, title, kind, path, status, error, html, body, ...} -> {"id"}: an error report the userscript uploads when a save fails
 GET  /reports  list of reports (newest first); /reports/<id> one report's details; /reports/<id>/html the page; /reports/<id>/body what was sent
 GET  /userscript/<name>.user.js  the userscripts of this checkout (install / @updateURL target); /userscript is a page listing them with Install links
@@ -25,12 +27,13 @@ from starlette.concurrency import run_in_threadpool
 
 from . import bundle
 from .config import Settings
-from .labguide import write_lab_guide
+from .labguide import guide_path, write_lab_guide
 from .notify import notify
 from .llm import make_client
-from .obsidian import editor_command, find_command, have_obsidian, open_note, uri_for
+from .obsidian import editor_command, find_command, have_obsidian, open_in_editor, uri_for
 from .reports import ReportStore
 from .pipeline import summary_path, write_summary
+from .files import Jobs, page_files
 from .userscripts import list_scripts, render_page
 
 
@@ -100,6 +103,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return target
 
     reports = ReportStore(settings.report_dir)
+    jobs = Jobs()
+    app.state.jobs = jobs
 
     @app.post("/reports")
     async def create_report(request: Request):
@@ -158,17 +163,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"exists": exists, "summary_exists": summary.is_file(), "opener": "obsidian" if obsidian else "editor",
                 "obsidian_uri": uri_for(summary if summary.is_file() else target) if exists and obsidian else None}
 
+    def listing(target: Path) -> list[dict]:
+        obsidian = have_obsidian(settings)
+        files = page_files(target, settings.root, jobs, obsidian)
+        for f in files:
+            if f["opener"] == "obsidian" and f["path"]:
+                f["obsidian_uri"] = uri_for(settings.root / f["path"])
+        return files
+
+    @app.get("/files")
+    def files(x_file_path: str | None = Header(None)):
+        """Every document of the page whose main file is X-File-Path (see files.page_files)."""
+        return {"files": listing(target_path(x_file_path))}
+
     @app.post("/open")
     def open_file(x_file_path: str | None = Header(None)):
-        """Open the summary (or the lesson) in a text editor: what the userscript's button does when Obsidian is missing."""
+        """Open one file from GET /files in a text editor on the server machine (what the Open button does for the editor
+        opener). Only files of a page listing are opened, never an arbitrary path."""
         target = target_path(x_file_path)
         if not target.is_file():
-            raise ApiError(404, "this lesson is not saved yet")
-        shown = summary_path(target) if summary_path(target).is_file() else target
-        used = open_note(shown, settings)
-        if not used:
+            raise ApiError(404, "this file is not saved")
+        main = target.with_name(re.sub(r"-(summary|lab-guide)\.md$", ".md", target.name))  # a summary belongs to its lesson
+        if str(target.relative_to(settings.root)) not in {f["path"] for f in listing(main)}:
+            raise ApiError(403, "not a file Mathesis wrote for a page")
+        if not open_in_editor(target, settings.editor_command):
             raise ApiError(501, "no text editor found on the server machine: set MATHESIS_EDITOR")
-        return {"opened_with": used, "path": str(shown)}
+        return {"opened_with": "text editor", "path": str(target.relative_to(settings.root))}
 
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
@@ -195,9 +215,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.notify_on_save:
             notify("Transcript saved", target.stem, enabled=settings.notify)
         if settings.summary_enabled and content.strip() and kind in ("transcript", "bundle", "lab"):
-            background.add_task(write_summary, content.decode("utf-8", "replace"), str(target), settings)
+            jobs.start(target, "summary")
+            background.add_task(jobs.run, target, "summary", summary_path(target), write_summary,
+                                content.decode("utf-8", "replace"), str(target), settings)
         if settings.lab_guide_enabled and content.strip() and kind == "lab":  # own thread: the summary may take minutes
-            threading.Thread(target=write_lab_guide, args=(content.decode("utf-8", "replace"), str(target), settings),
+            jobs.start(target, "lab-guide")
+            threading.Thread(target=jobs.run, args=(target, "lab-guide", guide_path(target), write_lab_guide,
+                                                    content.decode("utf-8", "replace"), str(target), settings),
                              daemon=True).start()
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind}
 

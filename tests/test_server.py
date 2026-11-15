@@ -223,3 +223,72 @@ def test_without_obsidian_status_says_editor_and_open_uses_the_editor(tmp_path, 
     import dataclasses
     with TestClient(server.create_app(dataclasses.replace(settings, editor_command=None))) as c:
         assert c.post("/open", headers={"X-File-Path": "P/C/01-L.md"}).status_code == 501  # no editor at all
+
+
+def _put(client, rel, text="x"):
+    f = client.root / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text)
+    return f
+
+
+def test_files_lists_quiz_attempts_newest_first_json_and_all_questions(client):
+    for name in ["02-incorrect.md", "02-incorrect (attempt 2).md", "02-incorrect (attempt 10).md", "02-all questions.md",
+                 "02-all questions.json", "03-incorrect.md", "02-lessons to learn.md"]:
+        _put(client, f"Udemy/C/{name}")
+    r = client.get("/files", headers={"X-File-Path": "Udemy/C/02-incorrect.md"}).json()["files"]
+    assert [(f["kind"], f.get("attempt")) for f in r] == [("incorrect", 10), ("incorrect", 2), ("incorrect", 1), ("all", None), ("json", None)]
+    assert r[0]["path"] == "Udemy/C/02-incorrect (attempt 10).md" and r[0]["opener"] == "obsidian"
+    assert r[0]["obsidian_uri"] == uri_for(client.root / "Udemy/C/02-incorrect (attempt 10).md")
+    assert r[-1]["opener"] == "editor" and "obsidian_uri" not in r[-1]
+    assert client.get("/files", headers={"X-File-Path": "Udemy/C/05-incorrect.md"}).json() == {"files": []}
+
+
+def test_files_lists_a_lesson_with_summary_and_guide(client):
+    _put(client, "G/C/01-Lab.md")
+    h = {"X-File-Path": "G/C/01-Lab.md"}
+    assert [f["kind"] for f in client.get("/files", headers=h).json()["files"]] == ["transcript"]
+    _put(client, "G/C/01-Lab-summary.md")
+    _put(client, "G/C/01-Lab-lab-guide.md")
+    assert [f["kind"] for f in client.get("/files", headers=h).json()["files"]] == ["lab-guide", "summary", "transcript"]
+    assert client.get("/files", headers={"X-File-Path": "G/C/09-None.md"}).json() == {"files": []}
+
+
+def test_files_shows_pending_and_failed_jobs(client):
+    target = _put(client, "G/C/01-Lab.md").resolve()
+    jobs = client.app.state.jobs
+    h = {"X-File-Path": "G/C/01-Lab.md"}
+    jobs.start(target, "summary")
+    got = {f["kind"]: f for f in client.get("/files", headers=h).json()["files"]}
+    assert got["summary"]["state"] == "pending" and got["summary"]["path"] is None
+    jobs.finish(target, "summary", target.with_name("01-Lab-summary.md"))   # ended without writing a file
+    got = {f["kind"]: f for f in client.get("/files", headers=h).json()["files"]}
+    assert got["summary"]["state"] == "failed" and "server log" in got["summary"]["error"]
+    _put(client, "G/C/01-Lab-summary.md")
+    jobs.start(target, "summary")
+    jobs.finish(target, "summary", target.with_name("01-Lab-summary.md"))   # written: nothing pending any more
+    got = {f["kind"]: f for f in client.get("/files", headers=h).json()["files"]}
+    assert got["summary"]["state"] == "ready" and got["summary"]["path"].endswith("01-Lab-summary.md")
+
+
+def test_open_only_opens_files_of_a_page(client, monkeypatch):
+    opened = []
+    monkeypatch.setattr(server, "open_in_editor", lambda path, configured=None: opened.append(path) or True)
+    _put(client, "Udemy/C/02-all questions.json")
+    _put(client, "Udemy/C/random.txt")
+    _put(client, "G/C/01-L.md")
+    _put(client, "G/C/01-L-summary.md")
+    ok = client.post("/open", headers={"X-File-Path": "Udemy/C/02-all questions.json"})
+    assert ok.status_code == 200 and opened[-1].name == "02-all questions.json"
+    assert client.post("/open", headers={"X-File-Path": "G/C/01-L-summary.md"}).status_code == 200
+    assert client.post("/open", headers={"X-File-Path": "Udemy/C/random.txt"}).status_code == 403
+    assert client.post("/open", headers={"X-File-Path": "Udemy/C/gone.md"}).status_code == 404
+    assert client.post("/open", headers={"X-File-Path": "../x.md"}).status_code == 403
+    assert len(opened) == 2
+
+
+def test_open_reports_a_missing_editor(client, monkeypatch):
+    monkeypatch.setattr(server, "open_in_editor", lambda path, configured=None: False)
+    _put(client, "Udemy/C/02-all questions.json")
+    r = client.post("/open", headers={"X-File-Path": "Udemy/C/02-all questions.json"})
+    assert r.status_code == 501 and "MATHESIS_EDITOR" in r.json()["error"]
