@@ -450,6 +450,7 @@
     #mathesis-tip.show { opacity: 1; }
     @media (prefers-reduced-motion: reduce) { #mathesis-tip { transition: none; } }
     #mathesis-status:empty, #mathesis-note:empty { display: none; }
+    .mx-tag { flex: none; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #9aa8bb; border: 1px solid #46536a; border-radius: 8px; padding: 0 6px; }
     #mathesis-note { color: #bdc1c6; font-size: 12px; max-width: 280px; }
     #mathesis-retry { background: none; border: 0; padding: 0; color: #8ab4f8; text-decoration: underline; cursor: pointer; font-size: 12px; }
     #mathesis-retry[disabled] { color: #9aa0a6; text-decoration: none; cursor: default; }
@@ -571,20 +572,21 @@
   const rowSpecs = () => (isQuizReview() ? [
     { chip: 'to review', kinds: ['incorrect'], save: () => copyLesson(false),
       tipOn: 'Saves the questions you got wrong or marked, with explanations, as NN-incorrect.md (the attempt is in the name for attempts after the first). Saving again replaces this attempt.',
-      tipOff: 'Copies the questions you got wrong or marked, with explanations, to the clipboard. The server is offline, so nothing is saved.' },
+      tipOff: 'Copies the questions you got wrong or marked, with explanations, to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
     { chip: 'all', kinds: ['all'], save: () => copyLesson(true),
       tipOn: 'Saves every question with its explanations as NN-all questions.md, a clean copy of the whole test. Overwrites the previous file.',
-      tipOff: 'Copies every question with its explanations to the clipboard. The server is offline, so nothing is saved.' },
+      tipOff: 'Copies every question with its explanations to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
     { chip: 'json', kinds: ['json'], save: saveJson,
       tipOn: 'Saves every question as a JSON file (options, correct answers, explanations) for other tools. Overwrites the previous file.',
-      tipOff: 'Copies every question as JSON to the clipboard. The server is offline, so nothing is saved.' },
+      tipOff: 'Copies every question as JSON to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
   ] : [
     { chip: 'transcript', kinds: ['transcript'], save: () => copyLesson(false),
       tipOn: 'Saves the transcript of this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.',
-      tipOff: 'Copies the transcript to the clipboard. The server is offline, so nothing is saved.' },
+      tipOff: 'Copies the transcript to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
   ]);
   const transcriptName = () => 'transcript';
-  const pagePath = () => computePathToWrite(false); // quiz results: the review file; the server finds its siblings and attempts
+  const pagePath = () => computePathToWrite(false);
+  const pageKey = () => pagePath().replace(/ \(attempt \d+\)(?=\.md$)/, ''); // every attempt of a quiz belongs to the same page // quiz results: the review file; the server finds its siblings and attempts
   const statusOf = (filePath) => fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } }).then((r) => r.json());
 
   // ---- save chips on top, one row per file below (click a name to open it, "⋯" for the rest) ----
@@ -650,6 +652,135 @@
   }[f.kind] || f.label.toLowerCase());
   const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
 
+  // ---- offline copies: with the server down, a save also keeps the text in this site's browser storage ----
+  // They are copies, not files in your notes: open them in StackEdit (the text is copied, you paste), copy, download, or send them
+  // to the server once it is back. Stored per site (localStorage), one key per file.
+  const OFF = 'mathesis-offline:';
+  const offlineKinds = { 'quiz-review': 'incorrect', 'quiz-all': 'all', 'quiz-json': 'json', transcript: 'transcript', bundle: 'transcript', lab: 'transcript', quiz: 'transcript' };
+  const offlineName = (e) => displayName({ kind: offlineKinds[e.kind] || 'transcript', attempt: parseInt((e.path.match(/\(attempt (\d+)\)/) || [])[1], 10) || 1, label: e.path });
+  function offlineAll() {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(OFF)) { try { out.push(JSON.parse(localStorage.getItem(key))); } catch (e) { /* a broken entry is skipped */ } }
+      }
+    } catch (e) { /* storage blocked */ }
+    return out.filter((e) => e && e.path && typeof e.text === 'string');
+  }
+  function offlineFor(key) { return offlineAll().filter((e) => e.page === key).sort((a, b) => b.savedAt - a.savedAt); }
+  function keepOffline(kind, path, text) {
+    if (kind === 'raw' || kind === 'bundle') return false; // a bundle's body is only a link: nothing to review
+    let page;
+    try { page = pageKey(); } catch (e) { return false; }
+    let meta = {};
+    try { meta = JSON.parse(decodeURIComponent(metaHeader())); } catch (e) { /* no metadata */ }
+    try {
+      localStorage.setItem(OFF + encodeURIComponent(path), JSON.stringify({ path, kind, text, meta, page, savedAt: Date.now() }));
+      renderRows();
+      return true;
+    } catch (e) { say('Could not keep an offline copy here: the browser storage is full or blocked.'); return false; }
+  }
+  function offlineDelete(path) {
+    try { localStorage.removeItem(OFF + encodeURIComponent(path)); } catch (e) { /* nothing stored */ }
+    renderRows();
+  }
+  function downloadText(name, text) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function uploadOffline(e, overwrite) {
+    try {
+      const r = await fetch(`${SERVER}/write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(e.path), 'X-Mathesis-Kind': e.kind,
+                   'X-Mathesis-Meta': encodeURIComponent(JSON.stringify(e.meta || {})), ...(overwrite ? { 'X-Mathesis-Overwrite': overwrite } : {}) },
+        body: e.text,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 409 && d.code === 'modified') { // the file in your notes has changes the server did not write
+        if (confirm('The file in your notes was changed after it was saved (your notes?). Sending this copy will overwrite those changes. Overwrite them?')) return uploadOffline(e, 'yes');
+        if (confirm('Keep the text of that file as it is and only update its metadata (frontmatter)?')) return uploadOffline(e, 'metadata');
+        say('Not sent: the offline copy is still here.');
+        return;
+      }
+      if (!r.ok) throw new Error(d.error || r.status + ' ' + r.statusText);
+      offlineDelete(e.path);
+      say(d.metadata_only ? 'Only the metadata of the file in your notes was updated; the offline copy was removed.'
+        : d.kept ? 'That file already existed without metadata, so only its metadata was added; the offline copy was removed.'
+        : 'Sent to the server; the offline copy was removed.');
+      refreshFiles();
+    } catch (error) { say(`Could not send it: ${error.message}`); }
+  }
+  function offlineRow(e) {
+    const row = document.createElement('div');
+    row.className = 'mx-file';
+    const name = document.createElement('button');
+    name.type = 'button';
+    name.className = 'mx-name';
+    name.textContent = offlineName(e);
+    const isJson = e.path.endsWith('.json');
+    const editor = isJson ? ONLINE.json : ONLINE.md;
+    name.addEventListener('click', () => openEditorWith(isJson, e.text));
+    tipOn(name, `An offline copy kept in this browser (${new Date(e.savedAt).toLocaleString()}). Click to copy it and open ${editor.name}.`);
+    const tag = document.createElement('span');
+    tag.className = 'mx-tag';
+    tag.textContent = 'offline';
+    const more = document.createElement('div');
+    more.className = 'mx-more';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'mx-ib';
+    toggle.textContent = '⋯';
+    toggle.setAttribute('aria-haspopup', 'menu');
+    toggle.setAttribute('aria-expanded', 'false');
+    tipOn(toggle, 'Open online, copy, download, send to the server, delete');
+    const menu = document.createElement('div');
+    menu.className = 'mx-menu';
+    menu.hidden = true;
+    menu.setAttribute('role', 'menu');
+    const items = [
+      ['online', `Copy the content and open ${editor.name}`, () => openEditorWith(isJson, e.text)],
+      ['copy', 'Copy the content', () => toClipboard(e.text, 'Content copied.')],
+      ['folder', 'Download as a file', () => downloadText(e.path.split('/').pop(), e.text)],
+      ...(serverUp ? [['open', 'Send to the server', () => uploadOffline(e)]] : []),
+      ['copy', 'Delete this offline copy', () => { if (confirm('Delete this offline copy from the browser?')) offlineDelete(e.path); }],
+    ];
+    for (const [icon, text, run] of items) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitem');
+      item.innerHTML = ICONS[icon];
+      item.append(document.createTextNode(text));
+      item.addEventListener('click', (ev) => { ev.stopPropagation(); closeMenus(); run(); });
+      menu.append(item);
+    }
+    toggle.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const wasHidden = menu.hidden;
+      closeMenus();
+      menu.hidden = !wasHidden;
+      toggle.setAttribute('aria-expanded', String(wasHidden));
+      if (wasHidden) menu.querySelector('button').focus();
+    });
+    menu.addEventListener('keydown', (ev) => {
+      const all = [...menu.querySelectorAll('button')];
+      const i = all.indexOf(document.activeElement);
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); all[(i + 1) % all.length].focus(); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); all[(i - 1 + all.length) % all.length].focus(); }
+      else if (ev.key === 'Escape') { closeMenus(); toggle.focus(); }
+    });
+    more.append(toggle, menu);
+    row.append(name, tag, more);
+    return row;
+  }
+
   async function toClipboard(text, done) {
     try { await navigator.clipboard.writeText(text); say(done); } catch (e) { say('Could not copy: ' + e.message); }
   }
@@ -665,14 +796,16 @@
   async function showInFolder(f) {
     try { await serverCall('/open', f, { 'X-Mathesis-Open': 'folder' }); } catch (e) { say(`Could not open the folder: ${e.message}`); }
   }
-  async function openOnline(f) {
-    const editor = f.kind === 'json' ? ONLINE.json : ONLINE.md;
+  async function openEditorWith(isJson, text) {
+    const editor = isJson ? ONLINE.json : ONLINE.md;
     try {
-      const text = await (await serverCall('/file', f)).text();
       await navigator.clipboard.writeText(text);
       say(`Content copied: paste it into ${editor.name}.`);
       window.open(editor.url, '_blank', 'noopener');
     } catch (e) { say(`Could not copy the content: ${e.message}`); }
+  }
+  async function openOnline(f) {
+    try { await openEditorWith(f.kind === 'json', await (await serverCall('/file', f)).text()); } catch (e) { say(`Could not copy the content: ${e.message}`); }
   }
 
   function fileRow(f) {
@@ -751,7 +884,10 @@
 
   function renderRows() {
     const specs = rowSpecs();
-    const key = JSON.stringify([serverUp, files, specs.map((s) => s.chip)]);
+    let pk = null;
+    try { pk = pageKey(); } catch (e) { /* page still loading */ }
+    const offline = pk ? offlineFor(pk) : [];
+    const key = JSON.stringify([serverUp, files, specs.map((s) => s.chip), offline.map((e) => [e.path, e.savedAt])]);
     if (key === renderKey) return;
     renderKey = key;
     hideTip();
@@ -786,6 +922,14 @@
       head.textContent = 'files';
       filesEl.append(head);
       for (const f of shown) filesEl.append(fileRow(f));
+    }
+    if (offline.length) {
+      const head = document.createElement('div');
+      head.className = 'mx-label';
+      head.style.marginTop = shown.length ? '6px' : '0';
+      head.textContent = 'offline copies';
+      filesEl.append(head);
+      for (const e of offline) filesEl.append(offlineRow(e));
     }
   }
 
@@ -883,9 +1027,12 @@
       }
     }
 
-    const copyOnly = (why) => navigator.clipboard.writeText(text)
-      .then(() => alert(why + 'Copied to the clipboard.'))
-      .catch((error) => alert('Could not copy text to clipboard: ' + error));
+    const copyOnly = (why) => {
+      const kept = keepOffline(kind, filePath, text); // an offline copy in this browser, and the clipboard
+      return navigator.clipboard.writeText(text)
+        .then(() => alert(why + 'Copied to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
+        .catch((error) => alert('Could not copy text to clipboard: ' + error));
+    };
     if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
 
     if (kind === 'quiz-review' && !attemptNumber()) { // the file is named after the attempt: never guess it
@@ -939,11 +1086,6 @@
   async function saveJson() {
     const text = await getQuizJson();
     if (!text) return;
-    if (!serverUp) { // no server: the JSON goes to the clipboard
-      navigator.clipboard.writeText(text).then(() => alert('Copied the JSON to the clipboard.'))
-        .catch((error) => alert('Could not copy text to clipboard: ' + error));
-      return;
-    }
     let filePath;
     try {
       filePath = jsonPathToWrite();
@@ -952,6 +1094,13 @@
       alert('Could not compute file path: ' + e.message);
       return;
     }
+    const copyJson = (why) => {
+      const kept = keepOffline('quiz-json', filePath, text); // an offline copy in this browser, and the clipboard
+      return navigator.clipboard.writeText(text)
+        .then(() => alert(why + 'Copied the JSON to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
+        .catch((e) => alert('Could not copy text to clipboard: ' + e));
+    };
+    if (!serverUp) { copyJson(''); return; } // no server: nothing is sent
     try {
       const response = await fetch(`${SERVER}/write`, {
         method: 'POST',
@@ -968,11 +1117,7 @@
       alert('All questions saved as JSON! (' + data.path + ')');
     } catch (error) {
       console.error('Error:', error);
-      if (!error.status) { // it went away since the last check: keep the work on the clipboard
-        navigator.clipboard.writeText(text).then(() => alert('Could not reach the Mathesis server. Copied the JSON to the clipboard.'))
-          .catch((e) => alert('Could not reach the Mathesis server, and could not copy: ' + e));
-        return;
-      }
+      if (!error.status) { copyJson('Could not reach the Mathesis server. '); return; } // it went away since the last check
       const id = await reportFailure({ kind: 'quiz-json', path: filePath, status: error.status, error: String(error.message || error), body: text });
       alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
     }
