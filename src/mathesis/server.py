@@ -210,7 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/file")
     def read_file(request: Request, x_file_path: str | None = Header(None)):
-        """The text of one file from GET /files (what "open online" copies to the clipboard)."""
+        """The text of one file from GET /files (what "copy the content" puts on the clipboard)."""
         origin = request.headers.get("origin")
         if origin and not NOTE_ORIGINS.match(origin):
             raise ApiError(403, "this page may not read notes")

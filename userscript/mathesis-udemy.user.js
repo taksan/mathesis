@@ -639,12 +639,10 @@
 
   const ICONS = {
     open: '<svg viewBox="0 0 16 16"><path d="M4 1.8h5l3 3V14H4z"/><path d="M9 1.8v3h3"/></svg>',
-    online: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>',
+    content: '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>',
     copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>',
     folder: '<svg viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.4 1.6h7v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></svg>',
   };
-  // Markdown goes to StackEdit, JSON to a JSON editor. They cannot read the disk, so the text is copied and the editor opens in a new tab.
-  const ONLINE = { md: { name: 'StackEdit', url: 'https://stackedit.io/app' }, json: { name: 'JSON Editor Online', url: 'https://jsoneditoronline.org/' } };
 
   const displayName = (f) => ({
     incorrect: `to review · attempt ${f.attempt || 1}`, all: 'all questions', json: 'all questions (json)',
@@ -653,7 +651,7 @@
   const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
 
   // ---- offline copies: with the server down, a save also keeps the text in this site's browser storage ----
-  // They are copies, not files in your notes: open them in StackEdit (the text is copied, you paste), copy, download, or send them
+  // They are copies, not files in your notes: copy their content, download them, or send them
   // to the server once it is back. Stored per site (localStorage), one key per file.
   const OFF = 'mathesis-offline:';
   const offlineKinds = { 'quiz-review': 'incorrect', 'quiz-all': 'all', 'quiz-json': 'json', transcript: 'transcript', bundle: 'transcript', lab: 'transcript', quiz: 'transcript' };
@@ -725,10 +723,8 @@
     name.type = 'button';
     name.className = 'mx-name';
     name.textContent = offlineName(e);
-    const isJson = e.path.endsWith('.json');
-    const editor = isJson ? ONLINE.json : ONLINE.md;
-    name.addEventListener('click', () => openEditorWith(isJson, e.text));
-    tipOn(name, `An offline copy kept in this browser (${new Date(e.savedAt).toLocaleString()}). Click to copy it and open ${editor.name}.`);
+    name.addEventListener('click', () => toClipboard(e.text, 'Content copied.'));
+    tipOn(name, `An offline copy kept in this browser (${new Date(e.savedAt).toLocaleString()}). Click to copy its content.`);
     const tag = document.createElement('span');
     tag.className = 'mx-tag';
     tag.textContent = 'offline';
@@ -740,14 +736,13 @@
     toggle.textContent = '⋯';
     toggle.setAttribute('aria-haspopup', 'menu');
     toggle.setAttribute('aria-expanded', 'false');
-    tipOn(toggle, 'Open online, copy, download, send to the server, delete');
+    tipOn(toggle, 'Copy, download, send to the server, delete');
     const menu = document.createElement('div');
     menu.className = 'mx-menu';
     menu.hidden = true;
     menu.setAttribute('role', 'menu');
     const items = [
-      ['online', `Copy the content and open ${editor.name}`, () => openEditorWith(isJson, e.text)],
-      ['copy', 'Copy the content', () => toClipboard(e.text, 'Content copied.')],
+      ['content', 'Copy the content', () => toClipboard(e.text, 'Content copied.')],
       ['folder', 'Download as a file', () => downloadText(e.path.split('/').pop(), e.text)],
       ...(serverUp ? [['open', 'Send to the server', () => uploadOffline(e)]] : []),
       ['copy', 'Delete this offline copy', () => { if (confirm('Delete this offline copy from the browser?')) offlineDelete(e.path); }],
@@ -796,16 +791,8 @@
   async function showInFolder(f) {
     try { await serverCall('/open', f, { 'X-Mathesis-Open': 'folder' }); } catch (e) { say(`Could not open the folder: ${e.message}`); }
   }
-  async function openEditorWith(isJson, text) {
-    const editor = isJson ? ONLINE.json : ONLINE.md;
-    try {
-      await navigator.clipboard.writeText(text);
-      say(`Content copied: paste it into ${editor.name}.`);
-      window.open(editor.url, '_blank', 'noopener');
-    } catch (e) { say(`Could not copy the content: ${e.message}`); }
-  }
-  async function openOnline(f) {
-    try { await openEditorWith(f.kind === 'json', await (await serverCall('/file', f)).text()); } catch (e) { say(`Could not copy the content: ${e.message}`); }
+  async function copyContent(f) { // the text of a saved file, from the server, to the clipboard
+    try { await toClipboard(await (await serverCall('/file', f)).text(), 'Content copied.'); } catch (e) { say(`Could not copy the content: ${e.message}`); }
   }
 
   function fileRow(f) {
@@ -842,15 +829,14 @@
     toggle.textContent = '⋯';
     toggle.setAttribute('aria-haspopup', 'menu');
     toggle.setAttribute('aria-expanded', 'false');
-    tipOn(toggle, 'Open online, copy the path, show in folder');
+    tipOn(toggle, 'Open locally, copy the content or the path, show in folder');
     const menu = document.createElement('div');
     menu.className = 'mx-menu';
     menu.hidden = true;
     menu.setAttribute('role', 'menu');
-    const editor = f.kind === 'json' ? ONLINE.json : ONLINE.md;
     for (const [icon, text, run] of [
       ['open', `Open locally in ${via(f)}`, () => openFile(f)],
-      ['online', `Copy the content and open ${editor.name}`, () => openOnline(f)],
+      ['content', 'Copy the content', () => copyContent(f)],
       ['copy', 'Copy file path', () => toClipboard(f.abs_path || f.path, 'Path copied.')],
       ['folder', 'Show in folder', () => showInFolder(f)],
     ]) {
