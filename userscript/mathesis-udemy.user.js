@@ -61,7 +61,13 @@
     const { base, prefix } = lessonFileName();
     // Quiz results: the folder already names the course and the tests are numbered, so the file is just "NN-incorrect.md"
     // (or "NN-all questions.md"), not "NN-<verbose quiz title> - incorrect.md".
-    if (isQuizReview()) return `${BASE_DIR}/${courseName()}/${prefix}${allQuestions ? 'all questions' : 'incorrect'}.md`;
+    // "Incorrect + To Review" depends on the attempt: the page says which one ("Attempt 2"), so attempt 1 is NN-incorrect.md and the
+    // others are NN-incorrect (attempt N).md. "All questions" is the same whatever the attempt.
+    if (isQuizReview()) {
+      const n = attemptNumber();
+      const suffix = allQuestions ? 'all questions' : n >= 2 ? `incorrect (attempt ${n})` : 'incorrect';
+      return `${BASE_DIR}/${courseName()}/${prefix}${suffix}.md`;
+    }
     return `${BASE_DIR}/${courseName()}/${base}.md`;
   }
 
@@ -238,6 +244,7 @@
     return lines.join('\n');
   }
 
+  const attemptNumber = () => parseInt((attemptLabel().match(/\d+/) || [])[0], 10) || 0;
   function attemptLabel() {
     for (const el of document.querySelectorAll('div, span, h1, h2, h3')) {
       if (!el.children.length && /^Attempt \d+$/.test(el.textContent.trim())) return el.textContent.trim();
@@ -438,19 +445,6 @@
     #mathesis-note { color: #bdc1c6; font-size: 12px; max-width: 280px; }
     #mathesis-retry { background: none; border: 0; padding: 0; color: #8ab4f8; text-decoration: underline; cursor: pointer; font-size: 12px; }
     #mathesis-retry[disabled] { color: #9aa0a6; text-decoration: none; cursor: default; }
-    #mathesis-dialog { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
-      background: rgba(0, 0, 0, 0.5); }
-    #mathesis-dialog .box { width: min(400px, 90vw); box-sizing: border-box; padding: 18px; display: flex; flex-direction: column; gap: 10px;
-      background: #252e3b; color: #e6ebf2; border: 1px solid #3b4658; border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    #mathesis-dialog .box * { box-sizing: border-box; font: inherit; }
-    #mathesis-dialog .sub { color: #9aa0a6; font-size: 13px; }
-    #mathesis-dialog button { width: 100%; padding: 9px 12px; border-radius: 8px; cursor: pointer; text-align: center; overflow-wrap: anywhere;
-      background: transparent; color: #e8eaed; border: 1px solid #46536a; }
-    #mathesis-dialog button:hover { background: rgba(255, 255, 255, 0.08); }
-    #mathesis-dialog button.primary { background: #8ab4f8; color: #202124; border-color: #8ab4f8; font-weight: 600; }
-    #mathesis-dialog button.primary:hover { filter: brightness(1.08); }
-    #mathesis-dialog button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
   `;
   document.head.appendChild(style);
 
@@ -805,60 +799,6 @@
       .catch(() => null);
   }
 
-  // Saving the Incorrect + To Review file when it is already saved: ask whether to overwrite it or keep it and save this one
-  // as another attempt ("NN-incorrect (attempt 2).md"). Resolves to 'overwrite', 'keep' or 'cancel'.
-  function askOverwriteOrKeep(existingName, newName, modified) {
-    return new Promise((resolve) => {
-      const overlay = document.createElement('div');
-      overlay.id = 'mathesis-dialog';
-      const box = document.createElement('div');
-      box.className = 'box';
-      box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-modal', 'true');
-      const heading = document.createElement('div');
-      heading.textContent = `“${existingName}” is already saved.`;
-      const sub = document.createElement('div');
-      sub.className = 'sub';
-      sub.textContent = (modified ? 'You changed it after it was saved (your notes?): overwriting will lose those changes. ' : '')
-        + 'Overwrite it, or keep it and save this one as another attempt?';
-      const choose = (value) => { document.removeEventListener('keydown', onKey, true); overlay.remove(); resolve(value); };
-      const make = (label, value, cls) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = cls || '';
-        b.textContent = label;
-        b.addEventListener('click', () => choose(value));
-        return b;
-      };
-      const keep = make(`Keep both: save as “${newName}”`, 'keep', 'primary');
-      const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); choose('cancel'); } };
-      document.addEventListener('keydown', onKey, true);
-      box.append(heading, sub, keep, make('Overwrite', 'overwrite'), make('Cancel', 'cancel'));
-      overlay.appendChild(box);
-      document.body.appendChild(overlay);
-      keep.focus();
-    });
-  }
-
-  // "Udemy/Course/02-incorrect.md" -> "Udemy/Course/02-incorrect (attempt 3).md"
-  const withAttempt = (path, n) => path.replace(/(\.[a-z]+)$/i, ` (attempt ${n})$1`);
-
-  // The path to save a quiz result to: the given one when it is free, otherwise whatever the person chooses.
-  // Returns null when they cancel. The new attempt number is the page's ("Attempt 2"), or the next free one.
-  async function chooseTarget(path) {
-    let exists, modified = false;
-    try { const st = await statusOf(path); exists = st.exists; modified = !!st.modified; } catch (e) { return { path }; } // server unreachable: the save itself reports it
-    if (!exists) return { path };
-    const shown = parseInt((attemptLabel().match(/\d+/) || [])[0], 10);
-    let candidate;
-    for (let n = shown >= 2 ? shown : 2; n < 100; n++) {
-      candidate = withAttempt(path, n);
-      try { if (!(await statusOf(candidate)).exists) break; } catch (e) { break; }
-    }
-    const choice = await askOverwriteOrKeep(path.split('/').pop(), candidate.split('/').pop(), modified);
-    return choice === 'cancel' ? null : choice === 'keep' ? { path: candidate } : { path, overwrite: true }; // asked, so the server need not ask again
-  }
-
   async function copyLesson(allQuestions = false) {
     let kind = isQuizReview() ? (allQuestions ? 'quiz-all' : 'quiz-review') : 'transcript';
     let text = allQuestions ? await getAllQuestions() : await getTranscript();
@@ -884,14 +824,9 @@
       .catch((error) => alert('Could not copy text to clipboard: ' + error));
     if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
 
-    let confirmed = false; // true once the person agreed to overwrite a file they had changed
-    // Incorrect + To Review depends on the attempt, so saving it again asks: overwrite, or keep both as another attempt.
-    // "All questions" (Markdown and JSON) is the same whatever the attempt, so it is simply overwritten.
-    if (kind === 'quiz-review') {
-      const target = await chooseTarget(filePath);
-      if (!target) return;
-      filePath = target.path;
-      confirmed = !!target.overwrite;
+    if (kind === 'quiz-review' && !attemptNumber()) { // the file is named after the attempt: never guess it
+      alert('Could not find the attempt number ("Attempt N") on this page, so the review was not saved. Try again once the results have loaded.');
+      return;
     }
 
     const send = (overwrite) => fetch(`${SERVER}/write`, {
@@ -912,7 +847,7 @@
         if (confirm('The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?')) return send(true);
         throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
       });
-    send(confirmed)
+    send(false)
       .then((data) => {
         console.log('[Mathesis] saved', data);
         refreshFiles();
