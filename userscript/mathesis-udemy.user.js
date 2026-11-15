@@ -411,7 +411,10 @@
   button.id = 'copy-transcript-btn';
   button.type = 'button';
   button.className = 'mx primary';
-  const LABEL = () => (isQuizReview() ? 'Copy Incorrect + To Review' : 'Copy Transcript');
+  // Server found: the buttons save. Server not found: they only copy to the clipboard and never try to reach it.
+  let serverUp = true;
+  const verb = () => (serverUp ? 'Save' : 'Copy');
+  const LABEL = () => `${verb()} ${isQuizReview() ? 'Incorrect + To Review' : 'Transcript'}`;
   button.textContent = LABEL();
 
   // One small panel instead of loose buttons: a header (status dot, name, fold), the main action, a status line,
@@ -532,16 +535,16 @@
   allButton.id = 'copy-all-btn';
   allButton.type = 'button';
   allButton.className = 'mx ghost';
-  const ALL_LABEL = 'Copy all questions';
-  allButton.textContent = ALL_LABEL;
+  const ALL_LABEL = () => `${verb()} all questions`;
+  allButton.textContent = ALL_LABEL();
   allButton.style.display = 'none';
   // Fourth button, quiz results only: the same questions as a JSON file (see schema/quiz-questions.schema.json).
   const jsonButton = document.createElement('button');
   jsonButton.id = 'save-json-btn';
   jsonButton.type = 'button';
   jsonButton.className = 'mx ghost';
-  const JSON_LABEL = 'Save all as JSON';
-  jsonButton.textContent = JSON_LABEL;
+  const JSON_LABEL = () => `${verb()} all as JSON`;
+  jsonButton.textContent = JSON_LABEL();
   jsonButton.style.display = 'none';
   let jsonSaved = false;
   const syncOpenButton = () => {
@@ -576,17 +579,18 @@
   function setButtonState(state, summaryDone) {
     panel.classList.remove('loading');
     lastState = state; lastSummary = summaryDone;
+    serverUp = state !== 'unknown';
     const review = isQuizReview();
     const anySaved = state === 'saved' || (review && allSaved);
     lessonSaved = anySaved;
     syncOpenButton();
     panel.classList.toggle('saved', anySaved);
     panel.classList.toggle('unknown', state === 'unknown');
-    button.textContent = state === 'saved' ? 'Copy again' : LABEL();
+    button.textContent = state === 'saved' ? `${verb()} again` : LABEL();
     allButton.classList.toggle('saved', review && allSaved);
-    allButton.textContent = review && allSaved ? '✓ All questions saved' : ALL_LABEL;
+    allButton.textContent = review && allSaved ? '✓ All questions saved' : ALL_LABEL();
     jsonButton.classList.toggle('saved', review && jsonSaved);
-    jsonButton.textContent = review && jsonSaved ? '✓ JSON saved' : JSON_LABEL;
+    jsonButton.textContent = review && jsonSaved ? '✓ JSON saved' : JSON_LABEL();
     statusEl.textContent = state === 'unknown' ? 'Server offline' :
       review ? `Incorrect: ${state === 'saved' ? 'saved' : 'not saved'} · All: ${allSaved ? 'saved' : 'not saved'}` :
       state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` : 'Not saved yet';
@@ -714,14 +718,17 @@
       }
     }
 
+    const copyOnly = (why) => navigator.clipboard.writeText(text)
+      .then(() => alert(why + 'Copied to the clipboard.'))
+      .catch((error) => alert('Could not copy text to clipboard: ' + error));
+    if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
+
     // Incorrect + To Review depends on the attempt, so saving it again asks: overwrite, or keep both as another attempt.
     // "All questions" (Markdown and JSON) is the same whatever the attempt, so it is simply overwritten.
     if (kind === 'quiz-review') {
       filePath = await chooseTarget(filePath);
       if (!filePath) return;
     }
-
-    navigator.clipboard.writeText(text).catch((error) => alert('Could not copy text to clipboard: ' + error));
 
     fetch(`${SERVER}/write`, {
       method: 'POST',
@@ -744,22 +751,19 @@
       })
       .catch(async (error) => {
         console.error('Error:', error);
+        if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
         alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
   }
-  // Offline fallback: the browser saves the file instead.
-  function downloadFile(name, text) {
-    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    const a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   async function saveJson() {
     const text = await getQuizJson();
     if (!text) return;
+    if (!serverUp) { // no server: the JSON goes to the clipboard
+      navigator.clipboard.writeText(text).then(() => alert('Copied the JSON to the clipboard.'))
+        .catch((error) => alert('Could not copy text to clipboard: ' + error));
+      return;
+    }
     let filePath;
     try {
       filePath = jsonPathToWrite();
@@ -785,9 +789,9 @@
       alert('All questions saved as JSON! (' + data.path + ')');
     } catch (error) {
       console.error('Error:', error);
-      if (!error.status) { // the server could not be reached: keep the work, let the browser save the file
-        downloadFile(filePath.split('/').pop(), text);
-        alert('Could not reach the Mathesis server (' + error + '): the JSON file was downloaded instead.');
+      if (!error.status) { // it went away since the last check: keep the work on the clipboard
+        navigator.clipboard.writeText(text).then(() => alert('Could not reach the Mathesis server. Copied the JSON to the clipboard.'))
+          .catch((e) => alert('Could not reach the Mathesis server, and could not copy: ' + e));
         return;
       }
       const id = await reportFailure({ kind: 'quiz-json', path: filePath, status: error.status, error: String(error.message || error), body: text });

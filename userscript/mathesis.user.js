@@ -234,7 +234,10 @@
   button.id = 'copy-transcript-btn';
   button.type = 'button';
   button.className = 'mx primary';
-  const LABEL = () => (isQuiz() ? 'Copy Quiz' : isBundle() ? 'Copy Lesson' : isLab() ? 'Copy Lab' : 'Copy Transcript');
+  // Server found: the buttons save. Server not found: they only copy to the clipboard and never try to reach it.
+  let serverUp = true;
+  const verb = () => (serverUp ? 'Save' : 'Copy');
+  const LABEL = () => `${verb()} ${isQuiz() ? 'Quiz' : isBundle() ? 'Lesson' : isLab() ? 'Lab' : 'Transcript'}`;
   button.textContent = LABEL();
 
   // One small panel instead of loose buttons: a header (status dot, name, fold), the main action, a status line,
@@ -372,11 +375,12 @@
   function setButtonState(state, summaryDone) {
     panel.classList.remove('loading');
     current = { state, summaryDone };
+    serverUp = state !== 'unknown';
     lessonSaved = state === 'saved';
     syncOpenButton();
     panel.classList.toggle('saved', state === 'saved');
     panel.classList.toggle('unknown', state === 'unknown');
-    button.textContent = state === 'saved' ? 'Copy again' : LABEL();
+    button.textContent = state === 'saved' ? `${verb()} again` : LABEL();
     statusEl.textContent = state === 'saved' ? `Saved${summaryDone ? ' · summary ready' : ''}` :
       state === 'unknown' ? 'Server offline' : 'Not saved yet';
   }
@@ -449,11 +453,10 @@
       }
     }
 
-    if (kind !== 'bundle') { // for a bundle the body is only the lesson URL; the server writes the Markdown
-      navigator.clipboard.writeText(text)
-        .then(() => console.log('Text copied'))
-        .catch((error) => alert('Could not copy text to clipboard: ' + error));
-    }
+    const copyOnly = (why) => navigator.clipboard.writeText(text)
+      .then(() => alert(why + 'Copied to the clipboard.'))
+      .catch((error) => alert('Could not copy text to clipboard: ' + error));
+    if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
 
     fetch('http://127.0.0.1:5000/write', {
       method: 'POST',
@@ -477,6 +480,7 @@
       })
       .catch(async (error) => {
         console.error('Error:', error);
+        if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
         alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
