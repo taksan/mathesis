@@ -389,9 +389,8 @@
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     #mathesis-panel button.primary { background: #8ab4f8; color: #14202f; border: 1px solid #8ab4f8; font-weight: 600; }
     #mathesis-panel button.primary:hover { filter: brightness(1.08); }
-    #mathesis-panel.saved button.primary { background: transparent; color: #e8eaed; border-color: #46536a; font-weight: 500; }
     #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #46536a; }
-    #mathesis-panel button.ghost:hover, #mathesis-panel.saved button.primary:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
+    #mathesis-panel button.ghost:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
     #mathesis-panel button.ghost.saved { border-color: #34a853; color: #81c995; }
     #mathesis-rows { display: grid; grid-template-columns: max-content 66px; gap: 6px; }
     #mathesis-rows:empty { display: none; }
