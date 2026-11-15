@@ -396,8 +396,13 @@
     #mathesis-panel.loading #mathesis-dot { display: none; }
     #mathesis-panel.loading button.mx { display: none !important; }
     #mathesis-panel.loading #mathesis-status { color: #e8eaed; font-size: 13px; margin-top: 0; }
-    #mathesis-panel.folded { width: auto; padding: 0; }
-    #mathesis-panel.folded #mathesis-head { margin: 0; border-bottom: 0; border-radius: 11px; }
+    /* folded: a vertical tab glued to the right edge of the window (+ on top, the name, the status dot at the bottom) */
+    #mathesis-panel.folded { right: 0 !important; width: auto; padding: 0; border-right: 0; border-radius: 10px 0 0 10px; }
+    #mathesis-panel.folded #mathesis-head { flex-direction: column; gap: 10px; margin: 0; padding: 12px 7px; border: 0; border-radius: 9px 0 0 9px; }
+    #mathesis-panel.folded #mathesis-fold { order: 0; padding: 0; }
+    #mathesis-panel.folded #mathesis-title { order: 1; flex: none; writing-mode: vertical-rl; }
+    #mathesis-panel.folded #mathesis-spinner { order: 2; }
+    #mathesis-panel.folded #mathesis-dot { order: 3; }
     #mathesis-panel.folded > :not(#mathesis-head) { display: none; }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
@@ -500,11 +505,19 @@
   }
   const savePos = () => {
     const r = panel.getBoundingClientRect();
-    try { localStorage.setItem(POS_KEY, JSON.stringify({ top: Math.round(r.top), right: Math.round(viewW() - r.right) })); } catch (e) { /* not remembered */ }
+    try {
+      let right = Math.round(viewW() - r.right);
+      if (panel.classList.contains('folded')) { // glued to the edge: only the height is the person's choice, the open panel keeps its own place
+        const before = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+        right = before && Number.isFinite(before.right) ? before.right : null; // null: the default place
+      }
+      localStorage.setItem(POS_KEY, JSON.stringify({ top: Math.round(r.top), right }));
+    } catch (e) { /* not remembered */ }
   };
   try {
     const pos = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
-    if (pos && Number.isFinite(pos.top) && Number.isFinite(pos.right)) { panel.style.top = pos.top + 'px'; panel.style.right = pos.right + 'px'; }
+    if (pos && Number.isFinite(pos.top)) panel.style.top = pos.top + 'px';
+    if (pos && Number.isFinite(pos.right)) panel.style.right = pos.right + 'px';
   } catch (e) { /* storage blocked or bad value: default position */ }
   let drag = null, moved = false;
   head.title = 'Drag to move · double-click to reset';
@@ -522,7 +535,7 @@
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!moved && Math.hypot(dx, dy) < 4) return; // a click, not a drag
     moved = true;
-    panel.style.right = drag.right - dx + 'px';
+    if (!panel.classList.contains('folded')) panel.style.right = drag.right - dx + 'px'; // folded: up and down only
     panel.style.top = drag.top + dy + 'px';
     clampPos();
   });
