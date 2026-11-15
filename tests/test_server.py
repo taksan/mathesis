@@ -301,3 +301,24 @@ def test_llm_off_starts_no_jobs_and_lists_no_pending_summary(tmp_path):
         assert c.post("/write", content=b"lab text, plenty of words", headers=h).status_code == 200
         kinds = [f["kind"] for f in c.get("/files", headers={"X-File-Path": "G/C/01-Lab.md"}).json()["files"]]
         assert kinds == ["transcript"]                       # no pending summary, no pending lab guide
+
+
+def test_a_job_that_wrote_nothing_reports_why(client):
+    target = _put(client, "G/C/01-L.md").resolve()
+    jobs = client.app.state.jobs
+    jobs.start(target, "summary")
+    jobs.run(target, "summary", target.with_name("01-L-summary.md"), lambda: "Ollama is not reachable at http://x:11434")
+    got = {f["kind"]: f for f in client.get("/files", headers={"X-File-Path": "G/C/01-L.md"}).json()["files"]}
+    assert got["summary"]["state"] == "failed" and got["summary"]["error"] == "Ollama is not reachable at http://x:11434"
+
+
+def test_a_job_that_raises_is_marked_failed(client):
+    target = _put(client, "G/C/01-L.md").resolve()
+    jobs = client.app.state.jobs
+
+    def boom():
+        raise RuntimeError("x")
+    jobs.start(target, "summary")
+    with pytest.raises(RuntimeError):
+        jobs.run(target, "summary", target.with_name("01-L-summary.md"), boom)
+    assert jobs.get(target, "summary")["state"] == "failed"

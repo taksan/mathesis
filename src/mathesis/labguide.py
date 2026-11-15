@@ -38,7 +38,7 @@ def generate(content: str, file: str | Path, settings: Settings, run=subprocess.
     return guide
 
 
-def write_lab_guide(content: str, file: str | Path, settings: Settings, run=subprocess.run) -> None:
+def write_lab_guide(content: str, file: str | Path, settings: Settings, run=subprocess.run) -> str | None:
     """Generate and save <file>-lab-guide.md; report the outcome with a desktop notification."""
     name = Path(file).stem
     try:
@@ -50,7 +50,7 @@ def write_lab_guide(content: str, file: str | Path, settings: Settings, run=subp
             print(f"No lab guide for {file}: {problem}. The lab text is saved.")
             if should_announce("lab_guide", problem):
                 notify("Saved without lab guide", f"{name}: {problem}", enabled=settings.notify)
-            return
+            return problem
         should_announce("lab_guide", None)
         print(f"Requesting lab guide ({client.label}) for {file}")
         guide = generate(content, file, settings, run, client)
@@ -64,3 +64,4 @@ def write_lab_guide(content: str, file: str | Path, settings: Settings, run=subp
     except Exception as e:
         print(f"Error generating lab guide for {file}: {e}")
         notify("Lab guide failed", f"{name}: {e}", error=True, enabled=settings.notify)
+        return str(e)

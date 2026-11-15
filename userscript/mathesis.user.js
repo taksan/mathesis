@@ -243,6 +243,7 @@
     @media (prefers-reduced-motion: reduce) { .mx-tip { transition: none; } }
     .mx-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #202124;
       display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    .mx-badge.warn { background: #f28b82; color: #202124; font: 700 10px/1 system-ui, sans-serif; }
     .mx-spin { display: inline-block; flex: none; width: 11px; height: 11px; border: 2px solid #5f6368; border-top-color: #7fe0d9;
       border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; vertical-align: middle; }
     @media (prefers-reduced-motion: reduce) { .mx-spin { animation: none; } }
@@ -448,17 +449,19 @@
       if (items.length) {
         const many = items.length > 1;
         const waiting = items.some((f) => f.state === 'pending');
+        const failed = items.filter((f) => f.state === 'failed');
         const open = document.createElement('button');
         open.type = 'button';
         open.className = 'mx open';
         open.textContent = many ? 'Open ▾' : 'Open';
         const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
         withTip(right, open, many ? 'Choose what to open.' + (waiting ? ' Greyed-out documents are still being written.' : '')
+          + failed.map((f) => ` Warning: the ${nameOf(f).replace(/^the /, '')} was not written (${f.error || 'see the server log'}).`).join('')
           : `Opens ${nameOf(items[0])} in ${via(items[0])}.`);
-        if (waiting) {
+        if (waiting || failed.length) { // a spinner while something is being written; a red ! when a document could not be written
           const badge = document.createElement('span');
-          badge.className = 'mx-badge';
-          badge.innerHTML = '<span class="mx-spin"></span>';
+          badge.className = 'mx-badge' + (waiting ? '' : ' warn');
+          if (waiting) badge.innerHTML = '<span class="mx-spin"></span>'; else badge.textContent = '!';
           right.append(badge);
         }
         if (!many) {
@@ -484,6 +487,7 @@
             } else if (f.state === 'failed') {
               side.classList.add('fail');
               side.textContent = 'failed';
+              item.title = f.error || '';
             } else {
               side.textContent = via(f).replace('your text editor', 'editor');
             }

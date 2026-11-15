@@ -67,3 +67,22 @@ def test_single_pipeline_makes_one_call():
     client = FakeClient(["## Summary\nhello"])
     notes, info = summarize("T", "/v/P/C/01-L.md", client, Settings(pipeline="single"), log=lambda *_: None)
     assert len(client.calls) == 1 and info["prompts"] == "single"
+
+
+def test_write_summary_and_guide_return_why_they_wrote_nothing(tmp_path, monkeypatch):
+    from mathesis import labguide, pipeline
+    from mathesis.config import Settings
+
+    class Down:
+        label = "ollama:x"
+        def check(self):
+            return False, "Ollama is not reachable at http://x:11434"
+
+    monkeypatch.setattr(pipeline, "make_client", lambda s, role, *a: Down())
+    monkeypatch.setattr(labguide, "make_client", lambda s, role, *a: Down())
+    settings = Settings(root=tmp_path, notify=False)
+    f = tmp_path / "01-L.md"
+    assert pipeline.write_summary("text", f, settings) == "Ollama is not reachable at http://x:11434"
+    assert labguide.write_lab_guide("text", f, settings) == "Ollama is not reachable at http://x:11434"
+    monkeypatch.setattr(pipeline, "make_client", lambda s, role, *a: None)
+    assert pipeline.write_summary("text", f, settings) is None   # provider "none": nothing to warn about

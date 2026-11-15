@@ -27,13 +27,13 @@ class Jobs:
         with self._lock:
             self._state[(str(target), kind)] = {"state": "pending"}
 
-    def finish(self, target: Path, kind: str, output: Path) -> None:
-        """Called when the job ends, however it ended: the file is there, or the job failed (details are in the server log)."""
+    def finish(self, target: Path, kind: str, output: Path, problem: str | None = None) -> None:
+        """Called when the job ends, however it ended: the file is there, or the job failed (`problem` says why)."""
         with self._lock:
             if output.is_file():
                 self._state.pop((str(target), kind), None)
             else:
-                self._state[(str(target), kind)] = {"state": "failed", "error": "not written: see the server log"}
+                self._state[(str(target), kind)] = {"state": "failed", "error": problem or "not written: see the server log"}
 
     def get(self, target: Path, kind: str) -> dict | None:
         with self._lock:
@@ -41,10 +41,11 @@ class Jobs:
 
     def run(self, target: Path, kind: str, output: Path, fn, *args) -> None:
         """Run a summary / lab guide writer, tracking it. Registered by `start` before the task is queued."""
+        problem = "stopped unexpectedly: see the server log"
         try:
-            fn(*args)
+            problem = fn(*args)   # the writers return why they wrote nothing (provider down, no key, a bad answer), or None
         finally:
-            self.finish(target, kind, output)
+            self.finish(target, kind, output, problem)
 
 
 def page_files(target: Path, root: Path, jobs: Jobs, obsidian: bool) -> list[dict]:

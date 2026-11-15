@@ -78,7 +78,7 @@ def render(notes: str, info: dict, settings: Settings) -> str:
     return clean_summary(notes) + footer
 
 
-def write_summary(content: str, file: str | Path, settings: Settings) -> None:
+def write_summary(content: str, file: str | Path, settings: Settings) -> str | None:
     """Generate and save <file>-summary.md; report the outcome with a desktop notification."""
     name = Path(file).stem
     try:
@@ -90,7 +90,7 @@ def write_summary(content: str, file: str | Path, settings: Settings) -> None:
             print(f"No summary for {file}: {problem}. The transcript is saved.")
             if should_announce("summary", problem):
                 notify("Saved without summary", f"{name}: {problem}", enabled=settings.notify)
-            return
+            return problem
         should_announce("summary", None)
         print(f"Requesting summary ({client.label}, pipeline {settings.pipeline}) for {file}")
         notes, info = summarize(content, file, client, settings)
@@ -103,3 +103,4 @@ def write_summary(content: str, file: str | Path, settings: Settings) -> None:
     except Exception as e:
         print(f"Error generating summary for {file}: {e}")
         notify("Summary failed", f"{name}: {e}", error=True, enabled=settings.notify)
+        return str(e)
