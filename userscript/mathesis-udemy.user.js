@@ -359,20 +359,21 @@
   style.textContent = `
     #mathesis-panel {
       position: fixed; top: 64px; right: 56px; z-index: 2147483647;
-      width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px;
-      background: #202124; color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
+      width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px;
+      background: #252e3b; color: #e6ebf2; border: 1px solid #3b4658; border-radius: 12px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     #mathesis-panel * { box-sizing: border-box; font: inherit; }
-    #mathesis-head { display: flex; align-items: center; gap: 8px; }
+    #mathesis-head { display: flex; align-items: center; gap: 8px; margin: 0 -10px 2px; padding: 9px 12px; background: #151a21;
+      border-bottom: 1px solid #3b4658; border-radius: 11px 11px 0 0; }
     #mathesis-dot { width: 9px; height: 9px; border-radius: 50%; background: #f9ab00; flex: none; }
     #mathesis-panel.saved #mathesis-dot { background: #34a853; }
     #mathesis-panel.unknown #mathesis-dot { background: #9aa0a6; }
     #mathesis-title { flex: 1; font-weight: 600; letter-spacing: 0.02em; }
     #mathesis-fold { background: none; border: none; color: #9aa0a6; cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
     #mathesis-fold:hover { color: #e8eaed; }
-    #mathesis-status { color: #9aa0a6; font-size: 12px; margin-top: -2px; }
-    #mathesis-spinner { display: none; width: 12px; height: 12px; flex: none; border: 2px solid #5f6368; border-top-color: #8ab4f8;
+    #mathesis-status { color: #9aa8bb; font-size: 12px; margin-top: -2px; }
+    #mathesis-spinner { display: none; width: 12px; height: 12px; flex: none; border: 2px solid #46536a; border-top-color: #8ab4f8;
       border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; }
     @keyframes mathesis-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { #mathesis-spinner { animation-duration: 2.4s; } }
@@ -381,14 +382,15 @@
     #mathesis-panel.loading #mathesis-dot { display: none; }
     #mathesis-panel.loading button.mx { display: none !important; }
     #mathesis-panel.loading #mathesis-status { color: #e8eaed; font-size: 13px; margin-top: 0; }
-    #mathesis-panel.folded { width: auto; padding: 8px 10px; }
+    #mathesis-panel.folded { width: auto; padding: 0; }
+    #mathesis-panel.folded #mathesis-head { margin: 0; border-bottom: 0; border-radius: 11px; }
     #mathesis-panel.folded > :not(#mathesis-head) { display: none; }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
-    #mathesis-panel button.primary { background: #8ab4f8; color: #202124; border: 1px solid #8ab4f8; font-weight: 600; }
+    #mathesis-panel button.primary { background: #8ab4f8; color: #14202f; border: 1px solid #8ab4f8; font-weight: 600; }
     #mathesis-panel button.primary:hover { filter: brightness(1.08); }
-    #mathesis-panel.saved button.primary { background: transparent; color: #e8eaed; border-color: #5f6368; font-weight: 500; }
-    #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #5f6368; }
+    #mathesis-panel.saved button.primary { background: transparent; color: #e8eaed; border-color: #46536a; font-weight: 500; }
+    #mathesis-panel button.ghost { background: transparent; color: #e8eaed; border: 1px solid #46536a; }
     #mathesis-panel button.ghost:hover, #mathesis-panel.saved button.primary:hover { background: rgba(255, 255, 255, 0.08); filter: none; }
     #mathesis-panel button.ghost.saved { border-color: #34a853; color: #81c995; }
     #mathesis-rows { display: grid; grid-template-columns: max-content 66px; gap: 6px; }
@@ -396,7 +398,7 @@
     #mathesis-panel.loading #mathesis-rows { display: none; }
     .mx-cell { position: relative; min-width: 0; }
     #mathesis-panel .mx-cell button.mx { width: 100%; height: 36px; padding: 0 16px; white-space: nowrap; }
-    #mathesis-panel .mx-cell button.mx.open { padding: 0 6px; background: transparent; color: #7fe0d9; border: 1px solid #0b9a93; }
+    #mathesis-panel .mx-cell button.mx.open { padding: 0 6px; background: transparent; color: #8ee0d6; border: 1px solid #5fb7ae; }
     #mathesis-panel .mx-cell button.mx.open:hover { background: rgba(11, 154, 147, 0.15); }
     /* hover: light orange that fades in and out */
     #mathesis-panel .mx-cell button.mx { transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
@@ -404,20 +406,19 @@
     #mathesis-panel .mx-menu button { transition: background-color 0.25s ease, color 0.25s ease; }
     #mathesis-panel .mx-menu button:not([aria-disabled="true"]):hover, #mathesis-panel .mx-menu button:not([aria-disabled="true"]):focus-visible { background: rgba(255, 204, 128, 0.28); }
     @media (prefers-reduced-motion: reduce) { #mathesis-panel .mx-cell button.mx, #mathesis-panel .mx-menu button { transition: none; } }
-    .mx-tip { position: absolute; bottom: calc(100% + 6px); width: 230px; max-width: calc(100vw - 32px); padding: 7px 9px;
-      background: #000; color: #fff; border: 1px solid #5f6368; border-radius: 6px; font-size: 12px; line-height: 1.4;
-      pointer-events: none; opacity: 0; transition: opacity 0.12s; z-index: 3; text-align: left; white-space: normal; }
-    .mx-cell.l .mx-tip { left: 0; } .mx-cell.r .mx-tip { right: 0; }
-    .mx-cell:hover .mx-tip, .mx-cell:focus-within .mx-tip { opacity: 1; }
-    @media (prefers-reduced-motion: reduce) { .mx-tip { transition: none; } }
-    .mx-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #202124;
+    #mathesis-tip { position: absolute; top: 0; width: 230px; max-width: 40vw; padding: 7px 9px; background: #121821; color: #e6ebf2;
+      border: 1px solid #46536a; border-radius: 6px; font-size: 12px; line-height: 1.4; pointer-events: none; opacity: 0;
+      transition: opacity 0.15s; z-index: 3; text-align: left; white-space: normal; }
+    #mathesis-tip.show { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { #mathesis-tip { transition: none; } }
+    .mx-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #252e3b;
       display: flex; align-items: center; justify-content: center; pointer-events: none; }
     .mx-badge.warn { background: #f28b82; color: #202124; font: 700 10px/1 system-ui, sans-serif; }
-    .mx-spin { display: inline-block; flex: none; width: 11px; height: 11px; border: 2px solid #5f6368; border-top-color: #7fe0d9;
+    .mx-spin { display: inline-block; flex: none; width: 11px; height: 11px; border: 2px solid #46536a; border-top-color: #7fe0d9;
       border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; vertical-align: middle; }
     @media (prefers-reduced-motion: reduce) { .mx-spin { animation: none; } }
     .mx-menu { position: absolute; right: 0; top: 100%; margin-top: 4px; min-width: 200px; padding: 4px; z-index: 4;
-      background: #2b2d30; border: 1px solid #5f6368; border-radius: 8px; }
+      background: #1d2531; border: 1px solid #46536a; border-radius: 8px; }
     .mx-menu[hidden] { display: none !important; }
     #mathesis-panel .mx-menu button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%;
       padding: 6px 8px; background: transparent; border: 0; border-radius: 5px; color: #e8eaed; text-align: left; cursor: pointer; }
@@ -433,12 +434,12 @@
     #mathesis-dialog { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
       background: rgba(0, 0, 0, 0.5); }
     #mathesis-dialog .box { width: min(400px, 90vw); box-sizing: border-box; padding: 18px; display: flex; flex-direction: column; gap: 10px;
-      background: #202124; color: #e8eaed; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
+      background: #252e3b; color: #e6ebf2; border: 1px solid #3b4658; border-radius: 12px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     #mathesis-dialog .box * { box-sizing: border-box; font: inherit; }
     #mathesis-dialog .sub { color: #9aa0a6; font-size: 13px; }
     #mathesis-dialog button { width: 100%; padding: 9px 12px; border-radius: 8px; cursor: pointer; text-align: center; overflow-wrap: anywhere;
-      background: transparent; color: #e8eaed; border: 1px solid #5f6368; }
+      background: transparent; color: #e8eaed; border: 1px solid #46536a; }
     #mathesis-dialog button:hover { background: rgba(255, 255, 255, 0.08); }
     #mathesis-dialog button.primary { background: #8ab4f8; color: #202124; border-color: #8ab4f8; font-weight: 600; }
     #mathesis-dialog button.primary:hover { filter: brightness(1.08); }
@@ -590,14 +591,31 @@
   };
   document.addEventListener('click', closeMenus);
 
+  // One tooltip per panel, shown beside it (so it never covers a button): on the left, or on the right when the panel
+  // has been dragged to the left half of the window. It follows the hovered or focused button's row.
+  const tipEl = document.createElement('div');
+  tipEl.id = 'mathesis-tip';
+  tipEl.setAttribute('aria-hidden', 'true');
   function withTip(cell, button, text) {
     button.setAttribute('aria-label', button.textContent + '. ' + text);
-    const tip = document.createElement('div');
-    tip.className = 'mx-tip';
-    tip.setAttribute('aria-hidden', 'true');
-    tip.textContent = text;
-    cell.append(button, tip);
+    cell.dataset.tip = text;
+    cell.append(button);
   }
+  function showTip(cell) {
+    if (!cell || !cell.dataset.tip) return;
+    const p = panel.getBoundingClientRect(), c = cell.getBoundingClientRect();
+    tipEl.textContent = cell.dataset.tip;
+    tipEl.style.top = Math.max(0, c.top - p.top - 1) + 'px';
+    const onRight = p.left + p.width / 2 < viewW() / 2;
+    tipEl.style.left = onRight ? 'calc(100% + 10px)' : 'auto';
+    tipEl.style.right = onRight ? 'auto' : 'calc(100% + 10px)';
+    tipEl.classList.add('show');
+  }
+  const hideTip = () => tipEl.classList.remove('show');
+  rowsEl.addEventListener('mouseover', (e) => showTip(e.target.closest('.mx-cell')));
+  rowsEl.addEventListener('focusin', (e) => showTip(e.target.closest('.mx-cell')));
+  rowsEl.addEventListener('mouseout', hideTip);
+  rowsEl.addEventListener('focusout', hideTip);
 
   const NAMES = { incorrect: 'the review', all: 'all questions', json: 'the JSON file', summary: 'the summary', transcript: 'the transcript', 'lab-guide': 'the lab guide' };
   const nameOf = (f) => NAMES[f.kind] || f.label.toLowerCase();
@@ -621,6 +639,7 @@
     const key = JSON.stringify([serverUp, files, specs.map((s) => s.label)]);
     if (key === renderKey) return;
     renderKey = key;
+    hideTip();
     rowsEl.textContent = '';
     for (const spec of specs) {
       const left = document.createElement('div');
@@ -954,7 +973,7 @@
     }
   }, true);
 
-  panel.append(head, rowsEl, statusEl, noteEl);
+  panel.append(head, rowsEl, statusEl, noteEl, tipEl);
   document.body.appendChild(panel);
   console.log('[Mathesis] Udemy button added');
 
