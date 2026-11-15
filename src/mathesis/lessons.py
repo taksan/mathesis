@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import frontmatter
+
 # files made from a lesson (summary, lab guide, Udemy quiz review and its lessons-to-learn companion), never lessons themselves
 # Files made from a lesson, not lessons themselves. Quiz results are named "NN-incorrect.md" / "NN-all questions.md" (the
 # older "NN-<title> - incorrect.md" form is still recognised), and the companion "NN-lessons to learn.md".
@@ -30,7 +32,7 @@ class Match:
 def lesson_files(course_dir: Path) -> list[Path]:
     """Transcript files of a course: every .md that is not a summary and not a quiz copy."""
     def is_quiz(f: Path) -> bool:
-        head = f.read_text(encoding="utf-8")[:400]
+        head = frontmatter.strip(f.read_text(encoding="utf-8"))[:400]
         return bool(re.search(r"\*\d+ questions · multiple choice", head))
     return [f for f in sorted(course_dir.glob("*.md")) if not is_derived(f.name) and not is_quiz(f)]
 
@@ -73,7 +75,7 @@ class LessonIndex:
         return [self._cache[key(t)] for t in texts]
 
     def build(self, course_dir: Path) -> "LessonIndex":
-        pairs = [(f, p) for f in lesson_files(course_dir) for p in passages(f.read_text(encoding="utf-8"))]
+        pairs = [(f, p) for f in lesson_files(course_dir) for p in passages(frontmatter.strip(f.read_text(encoding="utf-8")))]
         self.items = [(f, p, v) for (f, p), v in zip(pairs, self._vectors([p for _, p in pairs]))]
         return self
 

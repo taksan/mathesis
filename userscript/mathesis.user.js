@@ -52,6 +52,19 @@
     return `${BASE_DIR}/${learningPath}/${course}/${lessonPrefix(menu)}${activity}.md`;
   }
 
+  // Goes to the server for the frontmatter of the Markdown file (the server adds the file type and the hash itself).
+  function metaHeader() {
+    const course = [...document.querySelectorAll('.breadcrumbs-container a')].find((a) => /\/course_templates\/\d+$/.test(a.getAttribute('href') || ''));
+    const menu = document.querySelector('ql-contents-menu');
+    const lastItem = document.querySelector('.breadcrumbs-container li:last-child');
+    const meta = {
+      course: normalizeName(course && course.textContent),
+      lesson: normalizeName((menu && menu.getAttribute('selectedcontenttitle')) || (lastItem && lastItem.textContent)),
+      url: location.href,
+    };
+    return encodeURIComponent(JSON.stringify(meta));
+  }
+
   // Position of the current lesson in the course dropdown (all modules' activities in order),
   // 1-based and zero-padded so files sort correctly, e.g. "07-".
   function lessonPrefix(menu) {
@@ -645,7 +658,7 @@
 
     fetch('http://127.0.0.1:5000/write', {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind },
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader() },
       body: text,
     })
       .then((response) => {
@@ -657,6 +670,10 @@
       .then((data) => {
         console.log('Success:', data);
         refreshFiles();
+        if (data.kept) { // a file with your own text and no metadata: the server only added the metadata
+          alert('This file already existed without metadata, so it was not overwritten: only the metadata (frontmatter) was added, and your text is untouched.');
+          return;
+        }
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz' ? 'Quiz saved!'
           : kind === 'bundle' ? 'Lesson converted and saved!'

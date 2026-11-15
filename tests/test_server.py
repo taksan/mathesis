@@ -1,10 +1,17 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
-from mathesis import server
+from mathesis import frontmatter, server
 from mathesis.config import Settings
 from mathesis.obsidian import uri_for
 from mathesis.pipeline import summary_path
+
+
+def body(path):
+    """What the file says, without the frontmatter the server adds."""
+    return frontmatter.strip(path.read_text())
 
 
 @pytest.fixture
@@ -21,7 +28,7 @@ def test_write_creates_missing_directories_and_status_reflects_it(client):
     assert client.get("/status", headers=h).json() == {"exists": False, "summary_exists": False, "opener": "obsidian", "obsidian_uri": None}
     r = client.post("/write", content="# Lesson\nhello".encode(), headers=h)
     assert r.status_code == 200 and r.json()["bytes"] == 14 and r.json()["path"] == "Path/Course/01-Lesson.md"
-    assert target.read_text() == "# Lesson\nhello"
+    assert body(target) == "# Lesson\nhello"
     status = client.get("/status", headers=h).json()
     assert status["exists"] is True
     assert status["obsidian_uri"] == uri_for(target)                       # the lesson itself ...
@@ -83,7 +90,7 @@ def test_quiz_is_saved_but_never_summarized(tmp_path, monkeypatch):
         quiz = tmp_path.resolve() / "P" / "C" / "36-Final Assessment.md"
         r = c.post("/write", content="# Final Assessment\n".encode(),
                    headers={"X-File-Path": "P/C/36-Final Assessment.md", "X-Mathesis-Kind": "quiz"})
-        assert r.json()["kind"] == "quiz" and quiz.read_text() == "# Final Assessment\n"
+        assert r.json()["kind"] == "quiz" and body(quiz) == "# Final Assessment\n"
         lesson = tmp_path.resolve() / "P" / "C" / "01-L.md"
         c.post("/write", content=b"text", headers={"X-File-Path": "P/C/01-L.md", "X-Mathesis-Kind": "transcript"})
         c.post("/write", content=b"text", headers={"X-File-Path": "P/C/02-M.md"})   # no header = transcript
@@ -146,7 +153,7 @@ def test_bundle_is_converted_saved_and_summarized(tmp_path, monkeypatch):
                    headers={"X-File-Path": "Google Skills/P/C/08-Lesson.md", "X-Mathesis-Kind": "bundle"})
         assert r.status_code == 200 and r.json()["kind"] == "bundle"
     target = tmp_path / "Google Skills/P/C/08-Lesson.md"
-    assert target.read_text() == "# Lesson\n\nconverted text here\n"
+    assert body(target) == "# Lesson\n\nconverted text here\n"
     assert seen == ["https://storage.googleapis.com/cloud-training/x/index.html#/page/abc"]
     assert calls == [("# Lesson\n\nconverted text here\n", str(target))]
 
@@ -165,7 +172,7 @@ def test_percent_encoded_path_with_non_ascii_title(client):
     from urllib.parse import quote
     name = "Udemy/Curso/05-Prática – Quiz 1 - incorrect.md"
     r = client.post("/write", content=b"x", headers={"X-File-Path": quote(name), "X-Mathesis-Kind": "quiz-review"})
-    assert r.status_code == 200 and (client.root / name).read_text() == "x"
+    assert r.status_code == 200 and body(client.root / name) == "x"
     assert client.get("/status", headers={"X-File-Path": quote(name)}).json()["exists"] is True
     assert client.post("/write", content=b"x", headers={"X-File-Path": quote("../x.md")}).status_code == 403
 
@@ -322,3 +329,69 @@ def test_a_job_that_raises_is_marked_failed(client):
     with pytest.raises(RuntimeError):
         jobs.run(target, "summary", target.with_name("01-L-summary.md"), boom)
     assert jobs.get(target, "summary")["state"] == "failed"
+
+
+def meta_header(**values):
+    from urllib.parse import quote
+    return quote(json.dumps(values))
+
+
+def test_markdown_files_get_frontmatter_with_a_hash_of_the_body(client):
+    h = {"X-File-Path": "Udemy/Curso/02-incorrect.md", "X-Mathesis-Kind": "quiz-review",
+         "X-Mathesis-Meta": meta_header(course="Curso Ç", lesson="Prática 1", url="https://example.com/q/1")}
+    assert client.post("/write", content="# Incorrect\n\nq1\n".encode(), headers=h).json()["kept"] is False
+    text = (client.root / "Udemy/Curso/02-incorrect.md").read_text()
+    front, rest = frontmatter.split(text)
+    assert rest == "# Incorrect\n\nq1\n"
+    assert front[0] == 'type: "to-review"' and 'course: "Curso Ç"' in front and 'lesson: "Prática 1"' in front
+    assert 'url: "https://example.com/q/1"' in front
+    assert front[-1] == 'hash: "' + frontmatter.body_hash(rest) + '"'
+
+
+def test_kinds_map_to_file_types_and_fall_back_to_the_path(client):
+    for kind, expected in [("transcript", "transcript"), ("lab", "lab"), ("quiz-all", "all-questions"), ("quiz", "quiz")]:
+        client.post("/write", content=b"text", headers={"X-File-Path": f"G/Course X/05-{kind}.md", "X-Mathesis-Kind": kind})
+        front, _ = frontmatter.split((client.root / f"G/Course X/05-{kind}.md").read_text())
+        assert f'type: "{expected}"' in front and 'course: "Course X"' in front and f'lesson: "05-{kind}"' in front
+    client.post("/write", content=b"x", headers={"X-File-Path": "G/C/06-a.md", "X-Mathesis-Meta": "not json"})
+    assert frontmatter.split((client.root / "G/C/06-a.md").read_text())[0] is not None
+
+
+def test_json_and_raw_files_get_no_frontmatter(client):
+    client.post("/write", content=b'{"a": 1}', headers={"X-File-Path": "U/C/02-all questions.json", "X-Mathesis-Kind": "quiz-json"})
+    assert (client.root / "U/C/02-all questions.json").read_text() == '{"a": 1}'
+    client.post("/write", content=b"<html></html>", headers={"X-File-Path": "U/C/x.html", "X-Mathesis-Kind": "raw"})
+    assert (client.root / "U/C/x.html").read_text() == "<html></html>"
+
+
+def test_saving_over_a_file_without_frontmatter_only_adds_the_metadata(client):
+    f = _put(client, "Udemy/Curso/02-incorrect.md", "# my own notes\nQ1 ... >Conflict\n")
+    h = {"X-File-Path": "Udemy/Curso/02-incorrect.md", "X-Mathesis-Kind": "quiz-review"}
+    r = client.post("/write", content=b"# brand new text\n", headers=h).json()
+    assert r["kept"] is True
+    front, rest = frontmatter.split(f.read_text())
+    assert rest == "# my own notes\nQ1 ... >Conflict\n"                      # not one character of it changed
+    assert front[0] == 'type: "to-review"' and front[-1] == 'hash: "' + frontmatter.body_hash(rest) + '"'
+
+
+def test_saving_over_a_file_with_frontmatter_replaces_the_body_and_keeps_other_keys(client):
+    h = {"X-File-Path": "G/C/01-L.md", "X-Mathesis-Meta": meta_header(url="https://a")}
+    client.post("/write", content=b"first\n", headers=h)
+    f = client.root / "G/C/01-L.md"
+    f.write_text(f.read_text().replace('type: "transcript"', 'type: "transcript"\nstatus: reviewed'))
+    h["X-Mathesis-Meta"] = meta_header(url="https://b")
+    assert client.post("/write", content=b"second\n", headers=h).json()["kept"] is False
+    front, rest = frontmatter.split(f.read_text())
+    assert rest == "second\n" and "status: reviewed" in front and 'url: "https://b"' in front
+    assert front[-1] == 'hash: "' + frontmatter.body_hash("second\n") + '"'
+    assert sum(l.startswith("hash:") for l in front) == 1 and sum(l.startswith("url:") for l in front) == 1
+
+
+def test_the_hash_ignores_the_frontmatter():
+    a, _ = frontmatter.apply(None, "same body\n", {"type": "lab", "course": "A"})
+    b, _ = frontmatter.apply(None, "same body\n", {"type": "lab", "course": "B", "url": "u"})
+    hash_of = lambda t: [l for l in frontmatter.split(t)[0] if l.startswith("hash:")][0]
+    assert hash_of(a) == hash_of(b)
+    c, _ = frontmatter.apply(a, "different body\n", {})
+    assert hash_of(c) != hash_of(a)
+    assert frontmatter.split("---\nno end\n")[0] is None                    # an unclosed block is not frontmatter

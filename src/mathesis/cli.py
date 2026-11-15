@@ -11,6 +11,7 @@ from . import __version__
 from .config import DEFAULT_CONFIG, ConfigError, Settings
 from .lessons import is_derived
 from .obsidian import editor_command, find_command, open_note, opener_name
+from . import frontmatter
 from .llm import make_client
 from .pipeline import PROMPT_DIR, render, summarize, summary_path
 
@@ -102,7 +103,7 @@ def cmd_summarize(args) -> int:
             continue
         print(f"[{i}/{len(files)}] {f.name}")
         try:
-            notes, info = summarize(f.read_text(encoding="utf-8"), f, client, s)
+            notes, info = summarize(frontmatter.strip(f.read_text(encoding="utf-8")), f, client, s)
         except Exception as e:
             failures += 1
             print(f"  failed: {e}", file=sys.stderr)

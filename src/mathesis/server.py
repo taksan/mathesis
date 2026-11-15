@@ -1,6 +1,9 @@
 """HTTP API used by the userscript.
 
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
+              Header X-Mathesis-Meta: percent-encoded JSON {"course", "lesson", "url"} for the frontmatter (type and hash are the server's)
+              Markdown files get YAML frontmatter (type, course, lesson, url, hash of the body). A file that already exists without
+              frontmatter is not overwritten: the frontmatter is added and the rest is left as it is ("kept": true in the answer)
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
@@ -25,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from . import bundle
+from . import bundle, frontmatter
 from .config import Settings
 from .labguide import guide_path, write_lab_guide
 from .notify import notify
@@ -84,7 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind"],
+        allow_headers=["Content-Type", "X-File-Path", "X-Mathesis-Kind", "X-Mathesis-Meta"],
         allow_private_network=True,  # Chrome's Private Network Access preflight (public site -> 127.0.0.1)
     )
 
@@ -192,9 +195,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise ApiError(501, "no text editor found on the server machine: set MATHESIS_EDITOR")
         return {"opened_with": "text editor", "path": str(target.relative_to(settings.root))}
 
+    FILE_TYPES = {"transcript": "transcript", "bundle": "lesson", "lab": "lab", "quiz": "quiz",
+                  "quiz-review": "to-review", "quiz-all": "all-questions"}
+
+    def page_meta(raw: str | None, kind: str, target: Path) -> dict[str, str]:
+        """Frontmatter values: the type from the kind, course / lesson / url from X-Mathesis-Meta (percent-encoded JSON, sent
+        by the userscript); the course and lesson fall back to the folder and the file name."""
+        sent = {}
+        if raw:
+            try:
+                data = json.loads(unquote(raw))
+                sent = {k: " ".join(str(data[k]).split())[:500] for k in ("course", "lesson", "url") if isinstance(data, dict) and data.get(k)}
+            except ValueError:
+                pass  # not JSON: the file is still saved, with what the server can work out
+        return {"type": FILE_TYPES[kind], "course": sent.get("course") or target.parent.name,
+                "lesson": sent.get("lesson") or target.stem, "url": sent.get("url", "")}
+
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
-                    x_mathesis_kind: str | None = Header(None)):
+                    x_mathesis_kind: str | None = Header(None), x_mathesis_meta: str | None = Header(None)):
         """X-Mathesis-Kind: "transcript" (default) is summarized; "quiz" is only saved."""
         target = target_path(x_file_path)
         kind = (x_mathesis_kind or "transcript").strip().lower()
@@ -207,9 +226,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except bundle.BundleError as e:
                 notify("Lesson conversion failed", f"{target.name}: {e.message}", error=True, enabled=settings.notify)
                 raise ApiError(e.status, e.message)
+        written, kept = content, False
+        if kind in FILE_TYPES and target.suffix == ".md":  # frontmatter: type, course, lesson, url, hash of the body
+            try:
+                existing = target.read_text(encoding="utf-8") if target.is_file() else None
+                text, kept = frontmatter.apply(existing, content.decode("utf-8"), page_meta(x_mathesis_meta, kind, target))
+                written = text.encode("utf-8")
+            except UnicodeDecodeError:
+                pass  # not text we can add metadata to: saved as before
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
+            target.write_bytes(written)
         except OSError as e:
             notify("Transcript save failed", f"{target.name}: {e}", error=True, enabled=settings.notify)
             raise ApiError(500, str(e))
@@ -225,7 +252,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             threading.Thread(target=jobs.run, args=(target, "lab-guide", guide_path(target), write_lab_guide,
                                                     content.decode("utf-8", "replace"), str(target), settings),
                              daemon=True).start()
-        return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind}
+        # kept: the file existed without frontmatter, so only the metadata was added and its text was left alone
+        return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind,
+                "kept": kept}
 
     return app
 

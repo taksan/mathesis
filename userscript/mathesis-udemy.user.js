@@ -47,6 +47,13 @@
     return { title: name, prefix, base: `${prefix}${normalizeName(name)}` };
   }
 
+  // Goes to the server for the frontmatter of the Markdown file (the server adds the file type and the hash itself).
+  function metaHeader() {
+    let meta = { url: location.href };
+    try { meta = { course: courseName(), lesson: lessonFileName().title, url: location.href }; } catch (e) { /* page still loading */ }
+    return encodeURIComponent(JSON.stringify(meta));
+  }
+
   // The JSON copy of a quiz's questions sits next to the Markdown one: "NN-all questions.json".
   const jsonPathToWrite = () => computePathToWrite(true).replace(/\.md$/, '.json');
 
@@ -885,7 +892,7 @@
 
     fetch(`${SERVER}/write`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind },
+      headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader() },
       body: text,
     })
       .then((response) => {
@@ -897,6 +904,10 @@
       .then((data) => {
         console.log('[Mathesis] saved', data);
         refreshFiles();
+        if (data.kept) { // a file with your own text and no metadata: the server only added the metadata
+          alert('This file already existed without metadata, so it was not overwritten: only the metadata (frontmatter) was added, and your text is untouched.');
+          return;
+        }
         alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!'
           : kind === 'quiz-all' ? 'All questions saved!' : 'Transcript sent successfully!');
