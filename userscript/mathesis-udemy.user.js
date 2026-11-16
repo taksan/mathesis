@@ -399,11 +399,27 @@
     /* folded: a vertical tab glued to the right edge of the window (+ on top, the name, the status dot at the bottom) */
     #mathesis-panel.folded { right: 0 !important; width: auto; padding: 0; border-right: 0; border-radius: 10px 0 0 10px; }
     #mathesis-panel.folded #mathesis-head { flex-direction: column; gap: 10px; margin: 0; padding: 12px 7px; border: 0; border-radius: 9px 0 0 9px; }
-    #mathesis-panel.folded #mathesis-fold { order: 0; padding: 0; }
-    #mathesis-panel.folded #mathesis-title { order: 1; flex: none; writing-mode: vertical-rl; }
+    #mathesis-panel.folded #mathesis-mark { order: 0; }
+    #mathesis-panel.folded .mx-quick { order: 1; }
     #mathesis-panel.folded #mathesis-spinner { order: 2; }
     #mathesis-panel.folded #mathesis-dot { order: 3; }
-    #mathesis-panel.folded > :not(#mathesis-head) { display: none; }
+    #mathesis-panel.folded #mathesis-title, #mathesis-panel.folded #mathesis-fold { display: none; }
+    #mathesis-panel.folded > :not(#mathesis-head):not(#mathesis-tip) { display: none; }
+    /* the icon (a small mu) always sits first in the header and toggles the fold; the quick action only shows when folded */
+    #mathesis-panel #mathesis-mark { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: #8ab4f8;
+      color: #14202f; cursor: pointer; font: 700 19px/22px Georgia, "Times New Roman", serif; text-align: center; }
+    #mathesis-panel #mathesis-mark:hover { filter: brightness(1.08); }
+    #mathesis-panel #mathesis-mark:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    #mathesis-panel button.mx-quick { display: none; position: relative; width: 30px; height: 30px; padding: 0; border-radius: 8px; background: transparent;
+      color: #F2F0EB; border: 1px solid #46536a; cursor: pointer; align-items: center; justify-content: center;
+      transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
+    #mathesis-panel.folded button.mx-quick { display: inline-flex; }
+    #mathesis-panel.loading button.mx-quick { display: none; }
+    #mathesis-panel button.mx-quick:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; }
+    #mathesis-panel button.mx-quick:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+    .mx-quick svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .mx-quick .mx-saved { position: absolute; top: 3px; right: 3px; }
+    @media (prefers-reduced-motion: reduce) { #mathesis-panel button.mx-quick { transition: none; } }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     #mathesis-panel button.primary { background: #8ab4f8; color: #14202f; border: 1px solid #8ab4f8; font-weight: 600; }
@@ -468,12 +484,19 @@
   const title = document.createElement('span');
   title.id = 'mathesis-title';
   title.textContent = 'Mathesis';
+  const mark = document.createElement('button');
+  mark.id = 'mathesis-mark';
+  mark.type = 'button';
+  mark.textContent = '\u03BC'; // small mu: the icon of Mathesis
+  const quick = document.createElement('button');
+  quick.type = 'button';
+  quick.className = 'mx-quick';
   const fold = document.createElement('button');
   fold.id = 'mathesis-fold';
   fold.type = 'button';
   const spinner = document.createElement('span');
   spinner.id = 'mathesis-spinner';
-  head.append(dot, spinner, title, fold);
+  head.append(mark, title, spinner, dot, quick, fold);
   const statusEl = document.createElement('div');
   statusEl.id = 'mathesis-status';
   statusEl.setAttribute('role', 'status');
@@ -482,11 +505,12 @@
     panel.classList.toggle('folded', folded);
     fold.textContent = folded ? '+' : '–';
     fold.title = fold.ariaLabel = folded ? 'Expand' : 'Collapse';
+    mark.title = mark.ariaLabel = folded ? 'Mathesis: click to expand' : 'Mathesis: click to collapse';
     if (remember) { try { localStorage.setItem(FOLD_KEY, folded ? '1' : '0'); } catch (e) { /* not remembered */ } }
   };
   fold.addEventListener('click', () => setFolded(!panel.classList.contains('folded'), true));
-  // a click on the folded pill expands it (on the header, which owns the drag: the click is not retargeted to the title)
-  head.addEventListener('click', (e) => { if (!moved && e.target !== fold && panel.classList.contains('folded')) setFolded(false, true); });
+  // the icon toggles the fold: a pointer click is decided when the pointer is released (the header owns the drag, so the click never reaches the icon)
+  mark.addEventListener('click', (e) => { if (e.detail === 0) setFolded(!panel.classList.contains('folded'), true); }); // keyboard: a pointer click is handled with the drag, below
   let startFolded = false;
   try { startFolded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) { /* storage blocked */ }
   setFolded(startFolded, false);
@@ -524,9 +548,9 @@
   head.title = 'Drag to move · double-click to reset';
   head.style.cssText += 'cursor:grab;user-select:none;touch-action:none;';
   head.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.target === fold) return;
+    if (e.button !== 0 || e.target.closest('#mathesis-fold, .mx-quick')) return;
     const r = panel.getBoundingClientRect();
-    drag = { x: e.clientX, y: e.clientY, top: r.top, right: viewW() - r.right };
+    drag = { x: e.clientX, y: e.clientY, top: r.top, right: viewW() - r.right, onMark: !!e.target.closest('#mathesis-mark') };
     moved = false;
     head.setPointerCapture(e.pointerId);
     head.style.cursor = 'grabbing';
@@ -542,15 +566,17 @@
   });
   const endDrag = (e) => {
     if (!drag) return;
+    const toggle = drag.onMark && e.type === 'pointerup';
     drag = null;
     head.style.cursor = 'grab';
     try { head.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
     if (moved) savePos();
+    else if (toggle) setFolded(!panel.classList.contains('folded'), true);
   };
   head.addEventListener('pointerup', endDrag);
   head.addEventListener('pointercancel', endDrag);
   head.addEventListener('dblclick', (e) => {
-    if (e.target === fold) return;
+    if (e.target.closest('#mathesis-fold, .mx-quick')) return;
     panel.style.top = panel.style.right = '';
     try { localStorage.removeItem(POS_KEY); } catch (err) { /* nothing stored */ }
   });
@@ -619,10 +645,10 @@
   tipEl.id = 'mathesis-tip';
   tipEl.setAttribute('aria-hidden', 'true');
   function tipOn(node, text) {
-    node.setAttribute('aria-label', text);
+    if (typeof text === 'string') node.setAttribute('aria-label', text);
     const show = () => {
       const p = panel.getBoundingClientRect(), c = node.getBoundingClientRect();
-      tipEl.textContent = text;
+      tipEl.textContent = typeof text === 'function' ? text() : text;
       tipEl.style.top = Math.max(0, c.top - p.top - 4) + 'px';
       const onRight = p.left + p.width / 2 < viewW() / 2;
       tipEl.style.left = onRight ? 'calc(100% + 10px)' : 'auto';
@@ -643,6 +669,25 @@
     copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>',
     folder: '<svg viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.4 1.6h7v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></svg>',
   };
+
+  const ICON_SAVE = '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h8l3 3v8h-11z"/><path d="M5 2.5v3.5h5V2.5M5 13.5v-4h6v4"/></svg>';
+  // Folded: one button does the main action of the page (the first chip: the transcript, or the quiz to review).
+  let quickSpec = null;
+  quick.addEventListener('click', () => { if (quickSpec) quickSpec.save(); });
+  tipOn(quick, () => (quickSpec ? `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}` : ''));
+  function updateQuick(specs) {
+    quickSpec = specs[0] || null;
+    quick.style.display = quickSpec ? '' : 'none';
+    quick.textContent = '';
+    if (!quickSpec) return;
+    quick.insertAdjacentHTML('beforeend', serverUp ? ICON_SAVE : ICONS.copy);
+    if (serverUp && files.some((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready')) {
+      const dot = document.createElement('span');
+      dot.className = 'mx-saved';
+      quick.append(dot);
+    }
+    quick.setAttribute('aria-label', `${serverUp ? 'Save' : 'Copy'} ${quickSpec.chip}`);
+  }
 
   const displayName = (f) => ({
     incorrect: `to review · attempt ${f.attempt || 1}`, all: 'all questions', json: 'all questions (json)',
@@ -899,6 +944,7 @@
       chips.append(chip);
     }
     saveEl.append(label, chips);
+    updateQuick(specs);
     // files
     filesEl.textContent = '';
     const shown = serverUp ? files : [];
