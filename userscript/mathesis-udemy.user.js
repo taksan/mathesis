@@ -475,6 +475,7 @@
     #mathesis-panel button.mx-quick:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .mx-quick svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .mx-quick .mx-saved { position: absolute; top: 3px; right: 3px; }
+    .mx-quick .mx-quick-spin { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-width: 1.5px; }
     @media (prefers-reduced-motion: reduce) { #mathesis-panel button.mx-quick { transition: none; } }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
@@ -738,7 +739,11 @@
     quick.textContent = '';
     if (!quickSpec) return;
     quick.insertAdjacentHTML('beforeend', serverUp ? ICON_SAVE : ICONS.copy);
-    if (serverUp && files.some((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready')) { // a small green dot: that file exists
+    if (serverUp && files.some((f) => f.state === 'pending')) { // a summary / lab guide is being written: a spinner instead of the dot
+      const spin = document.createElement('span');
+      spin.className = 'mx-spin mx-quick-spin';
+      quick.append(spin);
+    } else if (serverUp && files.some((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready')) { // a small green dot: that file exists
       const dot = document.createElement('span');
       dot.className = 'mx-saved';
       quick.append(dot);
