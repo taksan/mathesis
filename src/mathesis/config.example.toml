@@ -1,4 +1,4 @@
-# Every Mathesis option, commented. `mathesis config --init` asks four questions and writes a minimal config.toml in
+# Every Mathesis option, commented. `mathesis config --init` asks a few questions and writes a minimal config.toml in
 # the application directory (gitignored); copy lines from here when you need more. Every key is optional.
 # API keys are NOT set here: see [providers.gemini].
 # Precedence: this file < MATHESIS_* environment variables < command-line flags.

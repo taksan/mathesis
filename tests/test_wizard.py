@@ -29,9 +29,20 @@ def clean_env(monkeypatch):
         monkeypatch.delenv(name)
 
 
-def test_all_defaults_make_a_valid_ollama_config(tmp_path):
+def test_all_defaults_need_no_ai_provider(tmp_path):
     notes = tmp_path / "notes"
     code, target, text = run(tmp_path, str(notes))       # then end of input: every other answer is the default
+    s = Settings.from_env(target)
+    assert code == 0 and notes.is_dir() and not s.llm and not s.summary_enabled and not s.lab_guide_enabled
+    lines = [l for l in target.read_text().splitlines() if l and not l.startswith("#")]
+    assert "llm = false" in lines and not any(l.startswith(("provider", "[summary]", "[lab_guide]", "[providers")) for l in lines)
+    after = text.split("Before you start:")[1]
+    assert "No AI is configured" in after and "ollama" not in after.lower().replace("config", "") and "API_KEY" not in after
+
+
+def test_ollama_config(tmp_path):
+    notes = tmp_path / "notes"
+    code, target, text = run(tmp_path, str(notes), "ollama")
     s = Settings.from_env(target)
     assert code == 0 and notes.is_dir()
     assert (s.default_provider, s.summary_provider, s.lab_provider, s.root) == ("ollama", "ollama", "ollama", notes.resolve())
@@ -49,7 +60,7 @@ def test_default_notes_folder_is_in_the_home_directory(tmp_path, monkeypatch):
 
 def test_gemini_default_with_overrides_and_key_instructions(tmp_path):
     # root, default = gemini (2), summaries = default (1), labs = claude-code (the 3rd entry after the default)
-    code, target, text = run(tmp_path, str(tmp_path / "n"), "2", "1", "claude-code")
+    code, target, text = run(tmp_path, str(tmp_path / "n"), "gemini", "1", "claude-code")
     s = Settings.from_env(target)
     assert (s.default_provider, s.summary_provider, s.lab_provider) == ("gemini", "gemini", "claude-code")
     body = target.read_text()
@@ -83,7 +94,7 @@ def test_existing_file_is_kept_unless_forced(tmp_path):
     before = target.read_text()
     code, _, text = run(tmp_path, str(tmp_path / "n2"))
     assert code == 1 and "already exists" in text and target.read_text() == before
-    code, _, _ = run(tmp_path, str(tmp_path / "n2"), "2", force=True)
+    code, _, _ = run(tmp_path, str(tmp_path / "n2"), "gemini", force=True)
     assert code == 0 and 'provider = "gemini"' in target.read_text()
 
 

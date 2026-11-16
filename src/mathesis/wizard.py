@@ -5,6 +5,7 @@ from pathlib import Path
 from .config import ConfigError, Settings, api_key_env
 
 DEFAULT_NOTES = "~/mathesis-notes"
+NO_AI = ("none", "No AI: lessons are only saved, no summaries and no lab guides (you can add a provider later)")
 PROVIDERS = [
     ("ollama", "Ollama: local models, no key (needs `ollama pull gemma4:12b`)"),
     ("gemini", "Gemini: Google API, key in GEMINI_API_KEY"),
@@ -43,8 +44,13 @@ def choose(ask, title: str, options: list[tuple[str, str]], out=print) -> str:
 
 
 def render(root: str, default: str, summary: str | None, lab: str | None, models: dict[str, str]) -> str:
-    """The config text. `summary` / `lab` are None when they follow the default provider."""
+    """The config text. `summary` / `lab` are None when they follow the default provider; default "none" = no AI."""
     q = json.dumps
+    if default == "none":
+        return "\n".join(["# Mathesis configuration, written by `mathesis config --init`.",
+                          "# Every option, commented: src/mathesis/config.example.toml. Restart `mathesis serve` after editing.", "",
+                          "# no AI: files are only saved. To get summaries, set llm = true and a provider (see the example file)",
+                          "llm = false", "", "[server]", f"root = {q(root)}      # the only folder the server may write into", ""])
     lines = ["# Mathesis configuration, written by `mathesis config --init`.",
              "# Every option, commented: src/mathesis/config.example.toml. Restart `mathesis serve` after editing.", "",
              "# the one provider for everything; [summary] / [lab_guide] below only override it",
@@ -63,21 +69,23 @@ def run_init(target: Path, force: bool = False, ask=None, out=print) -> int:
     if target.exists() and not force:
         out(f"error: {target} already exists (use --force to replace it, or edit it)")
         return 1
-    out("Mathesis setup: four questions. Enter accepts the default.\n")
+    out("Mathesis setup: a few questions. Enter accepts the default (no AI provider needed).\n")
     root = ask_text(ask, "1) Folder where lessons and notes are saved", DEFAULT_NOTES)
     root_dir = Path(root).expanduser()
     if root_dir.exists() and not root_dir.is_dir():
         out(f"error: {root_dir} exists and is not a folder")
         return 1
-    default = choose(ask, "2) Which model provider to use by default?", PROVIDERS, out)
+    default = choose(ask, "2) Which model provider to use by default?", [NO_AI, *PROVIDERS], out)
     others = [(n, label) for n, label in PROVIDERS if n != default]
-    jobs = {}
+    jobs = {"summary": None, "lab": None}
     for number, key, what, off in ((3, "summary", "summaries", "off: no summaries (lessons are only saved)"),
                                    (4, "lab", "lab guides", "off: no lab guides")):
+        if default == "none":
+            break
         picked = choose(ask, f"{number}) Which provider for {what}?",
                         [(default, f"default ({default})")] + others + [("none", off)], out)
         jobs[key] = None if picked == default else picked
-    used = {default, *(v for v in jobs.values() if v and v != "none")}
+    used = set() if default == "none" else {default, *(v for v in jobs.values() if v and v != "none")}
     models = {}
     if "openai" in used:  # the only built-in provider without a default model
         models["openai"] = ask_text(ask, "OpenAI model name", "gpt-4.1-mini")
@@ -97,6 +105,8 @@ def run_init(target: Path, force: bool = False, ask=None, out=print) -> int:
     env_file = target.parent / ".env"
     out("\nBefore you start:")
     step = 1
+    if default == "none":
+        out("  No AI is configured: lessons are saved as they are. Run `mathesis config --init --force` or edit the file to add a provider.")
     for key in keys:
         out(f"  {step}) Set {key}: either `export {key}=...` in the shell that starts the server,")
         out(f"     or write the line {key}=... to {env_file} (gitignored)")
