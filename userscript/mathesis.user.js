@@ -252,11 +252,14 @@
       transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease; }
     #mathesis-panel.folded button.mx-quick { display: inline-flex; }
     #mathesis-panel.loading button.mx-quick { display: none; }
+    #mathesis-panel button.mx-quick.saved { background: #1b5e35; border-color: #2f7d4f; color: #e6f4ea; }
+    #mathesis-panel button.mx-quick.pulse { animation: mathesis-ok 0.9s ease-out; }
+    @keyframes mathesis-ok { from { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.8); } to { box-shadow: 0 0 0 9px rgba(52, 168, 83, 0); } }
     #mathesis-panel button.mx-quick:hover { background: #8ab4f8; border-color: #8ab4f8; color: #14202f; }
     #mathesis-panel button.mx-quick:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .mx-quick svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .mx-quick .mx-saved { position: absolute; top: 3px; right: 3px; }
-    @media (prefers-reduced-motion: reduce) { #mathesis-panel button.mx-quick { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { #mathesis-panel button.mx-quick { transition: none; } #mathesis-panel button.mx-quick.pulse { animation: none; } }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     #mathesis-panel button.primary { background: #8ab4f8; color: #14202f; border: 1px solid #8ab4f8; font-weight: 600; }
@@ -349,8 +352,8 @@
   fold.addEventListener('click', () => setFolded(!panel.classList.contains('folded'), true));
   // the icon toggles the fold: a pointer click is decided when the pointer is released (the header owns the drag, so the click never reaches the icon)
   mark.addEventListener('click', (e) => { if (e.detail === 0) setFolded(!panel.classList.contains('folded'), true); }); // keyboard: a pointer click is handled with the drag, below
-  let startFolded = false;
-  try { startFolded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) { /* storage blocked */ }
+  let startFolded = true; // folded until the person unfolds it once (that choice is remembered)
+  try { startFolded = localStorage.getItem(FOLD_KEY) !== '0'; } catch (e) { /* storage blocked */ }
   setFolded(startFolded, false);
 
   // Drag the header to move the panel; the position is remembered per site and kept inside the window.
@@ -501,23 +504,23 @@
     folder: '<svg viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.4 1.6h7v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></svg>',
   };
 
+  const ICON_DONE = '<svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>';
   const ICON_SAVE = '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h8l3 3v8h-11z"/><path d="M5 2.5v3.5h5V2.5M5 13.5v-4h6v4"/></svg>';
   // Folded: one button does the main action of the page (the first chip: the transcript, or the quiz to review).
   let quickSpec = null;
   quick.addEventListener('click', () => { if (quickSpec) quickSpec.save(); });
-  tipOn(quick, () => (quickSpec ? `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}` : ''));
+  tipOn(quick, () => (quickSpec ? `${quick.classList.contains('saved') ? 'Saved' : serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}` : ''));
+  quick.addEventListener('animationend', () => quick.classList.remove('pulse'));
+  function pulseQuick() { quick.classList.remove('pulse'); void quick.offsetWidth; quick.classList.add('pulse'); } // a save just worked (the page may block on an alert next: the animation plays once it is closed)
   function updateQuick(specs) {
     quickSpec = specs[0] || null;
     quick.style.display = quickSpec ? '' : 'none';
     quick.textContent = '';
     if (!quickSpec) return;
-    quick.insertAdjacentHTML('beforeend', serverUp ? ICON_SAVE : ICONS.copy);
-    if (serverUp && files.some((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready')) {
-      const dot = document.createElement('span');
-      dot.className = 'mx-saved';
-      quick.append(dot);
-    }
-    quick.setAttribute('aria-label', `${serverUp ? 'Save' : 'Copy'} ${quickSpec.chip}`);
+    const saved = serverUp && files.some((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready'); // the file exists: dark green
+    quick.classList.toggle('saved', saved);
+    quick.insertAdjacentHTML('beforeend', saved ? ICON_DONE : serverUp ? ICON_SAVE : ICONS.copy);
+    quick.setAttribute('aria-label', `${saved ? 'Saved' : serverUp ? 'Save' : 'Copy'} ${quickSpec.chip}`);
   }
 
   const displayName = (f) => ({
@@ -893,7 +896,7 @@
     const copyOnly = (why) => {
       const kept = keepOffline(kind, filePath, text); // an offline copy in this browser, and the clipboard
       return navigator.clipboard.writeText(text)
-        .then(() => alert(why + 'Copied to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
+        .then(() => pulseQuick() || alert(why + 'Copied to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
         .catch((error) => alert('Could not copy text to clipboard: ' + error));
     };
     if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
@@ -920,6 +923,7 @@
     send(false)
       .then((data) => {
         console.log('Success:', data);
+        pulseQuick();
         refreshFiles();
         if (data.metadata_only) {
           alert('Only the metadata (frontmatter) was updated. Your text is untouched.');
