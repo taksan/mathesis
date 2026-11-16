@@ -31,7 +31,7 @@ KNOWN_KEYS = {
     "server": {"host", "port", "root", "userscript_dir", "report_dir", "notify", "notify_on_save",
                "obsidian_open", "obsidian_command", "editor_command"},
     "summary": {"enabled", "provider", "model", "pipeline", "max_revisions"},
-    "lab_guide": {"enabled", "provider", "model"},
+    "lab_guide": {"enabled", "provider", "model", "check_commands"},
 }
 
 
@@ -128,6 +128,7 @@ class Settings:
     pipeline: str = "two-stage"            # "two-stage" or "single"
     max_revisions: int = 2
     lab_guide: bool = True                 # labs also get <lesson>-lab-guide.md (gcloud / terraform)
+    lab_check_commands: bool = False       # Claude Code may read `gcloud ... --help` (nothing else) before it writes a lab guide
     claude_command: str = "claude"         # the Claude Code CLI, run headless (claude -p)
     claude_model: str | None = None        # --model for it (unset: Claude Code's default)
     claude_timeout: int = 900              # seconds
@@ -233,6 +234,7 @@ class Settings:
             pipeline=pick("MATHESIS_PIPELINE", summary.get("pipeline"), cls.pipeline),
             max_revisions=pick("MATHESIS_MAX_REVISIONS", summary.get("max_revisions"), cls.max_revisions, int),
             lab_guide=flag("MATHESIS_LAB_GUIDE", lab.get("enabled"), True),
+            lab_check_commands=flag("MATHESIS_LAB_CHECK", lab.get("check_commands"), False),
             claude_command=pick("MATHESIS_CLAUDE", claude.get("command"), cls.claude_command),
             claude_model=pick("MATHESIS_CLAUDE_MODEL", claude.get("model"), None) or None,
             claude_timeout=pick("MATHESIS_CLAUDE_TIMEOUT", claude.get("timeout"), cls.claude_timeout, int),

@@ -31,6 +31,8 @@ def clean(text: str) -> str:
 def generate(content: str, file: str | Path, settings: Settings, run=subprocess.run, client=None) -> str:
     client = client or make_client(settings, "lab_guide", run)
     system = (PROMPT_DIR / "lab_guide.txt").read_text(encoding="utf-8")
+    if getattr(client, "checks_commands", False):  # the model can read gcloud help: tell it to
+        system += "\n\n" + (PROMPT_DIR / "lab_guide_check.txt").read_text(encoding="utf-8")
     title = re.sub(r"^\d+-", "", Path(file).stem)
     guide = clean(client.chat(system, f"Lab: {title}\n\nLab instructions:\n\n{content}"))
     if len(guide.split()) < 20:

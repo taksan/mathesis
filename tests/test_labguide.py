@@ -122,3 +122,37 @@ def test_lab_guide_can_be_switched_off(tmp_path, monkeypatch):
         r = c.post("/write", content=b"Task 1", headers={"X-File-Path": "P/C/05-Lab.md", "X-Mathesis-Kind": "lab"})
     time.sleep(0.1)
     assert r.json()["kind"] == "lab" and guides == []
+
+
+def test_checking_commands_is_off_by_default_and_gives_only_help_pages_when_on(tmp_path, monkeypatch):
+    import os, stat, subprocess
+    from mathesis import llm
+    assert not llm.make_client(settings(tmp_path), "lab_guide").checks_commands
+    monkeypatch.setattr(llm.shutil, "which", lambda name: f"/usr/bin/{name}")
+    s = settings(tmp_path, lab_check_commands=True)
+    assert llm.make_client(s, "lab_guide").checks_commands and not getattr(llm.make_client(s, "summary"), "checks_commands", False)  # only lab guides
+    seen = []
+    labguide.generate("Task 1: create a VM", tmp_path / "05-Lab.md", s, fake_run(seen=seen))
+    command, kwargs = seen[0]
+    assert command[command.index("--tools") + 1] == "Bash" and command[command.index("--allowedTools") + 1] == "Bash(gcloud * --help)"
+    assert command[command.index("--permission-mode") + 1] == "dontAsk"
+    assert "gcloud <anything> --help" in command[command.index("--system-prompt") + 1]          # the model is told it can look flags up
+    env = kwargs["env"]
+    assert env["CLOUDSDK_CONFIG"].startswith(kwargs["cwd"]) and env["PATH"].startswith(kwargs["cwd"])  # no account, no project: an empty config
+
+
+def test_the_gcloud_shim_runs_help_and_refuses_everything_else(tmp_path):
+    import os, subprocess
+    from mathesis.llm import GCLOUD_SHIM
+    real = tmp_path / "real-gcloud"
+    real.write_text('#!/bin/sh\necho "REAL $*"\n')
+    shim = tmp_path / "gcloud"
+    shim.write_text(GCLOUD_SHIM)
+    for f in (real, shim):
+        f.chmod(0o755)
+    run = lambda *args: subprocess.run([str(shim), *args], capture_output=True, text=True, env={"REAL_GCLOUD": str(real), "PATH": "/usr/bin:/bin"})
+    ok = run("run", "deploy", "--help")
+    assert ok.returncode == 0 and ok.stdout == "REAL run deploy --help\n"
+    for args in (("projects", "list"), ("projects", "delete", "x", "--quiet"), ("auth", "list"), ("--help-me",), ()):
+        bad = run(*args)
+        assert bad.returncode == 2 and "REAL" not in bad.stdout and "only 'gcloud" in bad.stderr

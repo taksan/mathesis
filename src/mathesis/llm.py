@@ -94,13 +94,27 @@ class OpenAIClient:
         return text
 
 
+# The only `gcloud` the model can reach when it may check commands: help pages. It runs with an empty CLOUDSDK_CONFIG (no account,
+# no project, no credentials), so even a command that slipped past the allow rule could not touch a real project.
+GCLOUD_SHIM = """#!/bin/sh
+# Mathesis: `gcloud ... --help` only (read-only, offline, no credentials)
+case " $* " in
+  *" --help "*) exec "$REAL_GCLOUD" "$@" ;;
+esac
+echo "only 'gcloud ... --help' is available here" >&2
+exit 2
+"""
+
+
 class ClaudeCodeClient:
-    def __init__(self, spec: dict, run=subprocess.run):
+    def __init__(self, spec: dict, run=subprocess.run, check_gcloud: bool = False):
         self.command, self.model, self.timeout, self._run = spec["command"], spec.get("model"), int(spec["timeout"]), run
+        self.real_gcloud = shutil.which("gcloud") if check_gcloud else None
+        self.checks_commands = bool(self.real_gcloud)   # the model may read `gcloud ... --help` before it writes a command
 
     @property
     def label(self) -> str:
-        return "Claude Code" + (f" ({self.model})" if self.model else "")
+        return "Claude Code" + (f" ({self.model})" if self.model else "") + (" + gcloud help" if self.checks_commands else "")
 
     def check(self) -> tuple[bool, str]:
         path = shutil.which(self.command)
@@ -109,17 +123,33 @@ class ClaudeCodeClient:
         return True, f"Claude Code CLI: {path}"
 
     def build_command(self, executable: str, system: str) -> list[str]:
-        command = [executable, "-p", "--output-format", "text", "--tools", "", "--no-session-persistence",
-                   "--system-prompt", system]
+        # no tools; or, to check commands, only Bash and only `gcloud <anything> --help` (anything else is refused, never asked)
+        tools = (["--tools", "Bash", "--allowedTools", "Bash(gcloud * --help)", "--permission-mode", "dontAsk",
+                  "--setting-sources", "project"] if self.checks_commands else ["--tools", ""])
+        command = [executable, "-p", "--output-format", "text", *tools, "--no-session-persistence", "--system-prompt", system]
         return command + (["--model", self.model] if self.model else [])
+
+    def _environment(self, scratch: str) -> dict | None:
+        if not self.checks_commands:
+            return None
+        bin_dir = os.path.join(scratch, "bin")
+        os.makedirs(bin_dir)
+        shim = os.path.join(bin_dir, "gcloud")
+        with open(shim, "w") as f:
+            f.write(GCLOUD_SHIM)
+        os.chmod(shim, 0o755)
+        return {**os.environ, "PATH": bin_dir + os.pathsep + os.environ.get("PATH", ""), "REAL_GCLOUD": self.real_gcloud,
+                "CLOUDSDK_CONFIG": os.path.join(scratch, "gcloud-config"), "CLOUDSDK_CORE_DISABLE_PROMPTS": "1",
+                "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING": "true", "CLOUDSDK_CORE_DISABLE_COLOR": "true"}
 
     def chat(self, system: str, user: str, temperature: float = 0.2) -> str:
         executable = shutil.which(self.command)
         if not executable:
             raise RuntimeError(self.check()[1])
         with tempfile.TemporaryDirectory(prefix="mathesis-claude-") as scratch:  # nothing of the project or the notes in reach
+            extra = {"env": env} if (env := self._environment(scratch)) else {}
             done = self._run(self.build_command(executable, system), input=user, capture_output=True, text=True,
-                             cwd=scratch, timeout=self.timeout)
+                             cwd=scratch, timeout=self.timeout, **extra)
         if done.returncode != 0:
             raise RuntimeError(f"claude exited with {done.returncode}: {(done.stderr or done.stdout).strip()[-300:]}")
         return done.stdout
@@ -136,7 +166,7 @@ def make_client(settings: Settings, role: str, run=subprocess.run):
         return OllamaClient(settings, spec)
     if spec["type"] == "openai":
         return OpenAIClient(spec)
-    return ClaudeCodeClient(spec, run)
+    return ClaudeCodeClient(spec, run, check_gcloud=role == "lab_guide" and settings.lab_check_commands)
 
 
 _announced: dict[str, str] = {}
