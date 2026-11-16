@@ -268,9 +268,34 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def first_run_setup(args, interactive: bool | None = None) -> bool:
+    """No config anywhere and nobody said where it is: ask the few questions once and write config.toml.
+
+    Only when a person is at the terminal (a script or the reloaded server never waits for an answer; the built-in
+    defaults apply there) and only for the commands that read the config. Returns True when a file was written."""
+    if args.command not in ("serve", "doctor", "summarize") or getattr(args, "config", None) or os.environ.get("MATHESIS_CONFIG"):
+        return False
+    if DEFAULT_CONFIG.exists():
+        return False
+    if interactive is None:
+        interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    if not interactive:
+        print(f"note: no config file ({DEFAULT_CONFIG}); using the built-in defaults. `mathesis config --init` creates one.",
+              file=sys.stderr)
+        return False
+    from .wizard import run_init
+    print(f"First run: there is no config file yet ({DEFAULT_CONFIG}).\n")
+    try:
+        return run_init(DEFAULT_CONFIG, starting=True) == 0
+    except (KeyboardInterrupt, EOFError):
+        print("\nsetup cancelled: nothing written; run `mathesis config --init` when you are ready", file=sys.stderr)
+        raise SystemExit(130)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        first_run_setup(args)
         return args.func(args)
     except ConfigError as e:
         print(f"config error: {e}", file=sys.stderr)

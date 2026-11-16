@@ -64,7 +64,8 @@ def render(root: str, default: str, summary: str | None, lab: str | None, models
     return "\n".join(lines)
 
 
-def run_init(target: Path, force: bool = False, ask=None, out=print) -> int:
+def run_init(target: Path, force: bool = False, ask=None, out=print, starting: bool = False) -> int:
+    """`starting`: the command that follows (serve, doctor...) carries on right after, so the last hint is not "now run it"."""
     ask = ask or input
     if target.exists() and not force:
         out(f"error: {target} already exists (use --force to replace it, or edit it)")
@@ -117,5 +118,8 @@ def run_init(target: Path, force: bool = False, ask=None, out=print) -> int:
     if "claude-code" in used:
         out(f"  {step}) Make sure the `claude` CLI is installed and logged in")
         step += 1
-    out(f"  {step}) `mathesis doctor` checks everything, then `mathesis serve` starts the server")
+    if starting:
+        out(f"  {step}) `mathesis doctor` checks everything at any time; change answers with `mathesis config --init --force`\n")
+    else:
+        out(f"  {step}) `mathesis doctor` checks everything, then `mathesis serve` starts the server")
     return 0
