@@ -16,6 +16,62 @@
   const BASE_DIR = 'Udemy';
   const SERVER = 'http://127.0.0.1:5000';
 
+  // ---- toasts: messages that do not block the page (an toast() hides the panel and stops everything until it is closed) ----
+  // ok fades after a few seconds, info a bit later, an error stays until it is dismissed (it may carry an error-report ID to copy).
+  // Questions that need an answer (overwrite your notes?) still use confirm().
+  function toast(message, kind = 'info') {
+    if (!document.body || !document.head) { console.log('[Mathesis]', message); return null; }
+    let box = document.getElementById('mathesis-toasts');
+    if (!box) {
+      const st = document.createElement('style');
+      st.textContent = `
+        #mathesis-toasts { position: fixed; bottom: 20px; right: 20px; z-index: 2147483647; display: flex; flex-direction: column; gap: 8px;
+          align-items: flex-end; max-width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+        #mathesis-toasts .mx-toast { pointer-events: auto; display: flex; gap: 10px; align-items: flex-start; box-sizing: border-box; max-width: 100%;
+          padding: 10px 8px 10px 12px; background: #1d2531; color: #F2F0EB; border: 1px solid #46536a; border-left: 4px solid #8ab4f8; border-radius: 8px;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; white-space: pre-line;
+          animation: mathesis-toast-in 0.18s ease-out; transition: opacity 0.2s ease; }
+        #mathesis-toasts .mx-toast.ok { border-left-color: #34a853; }
+        #mathesis-toasts .mx-toast.error { border-left-color: #ff8a80; user-select: text; }
+        #mathesis-toasts .mx-toast.out { opacity: 0; }
+        #mathesis-toasts .mx-toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        #mathesis-toasts .mx-toast-x { flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #9aa8bb;
+          font: 16px/22px system-ui, sans-serif; cursor: pointer; }
+        #mathesis-toasts .mx-toast-x:hover, #mathesis-toasts .mx-toast-x:focus-visible { background: #8ab4f8; color: #14202f; outline: none; }
+        @keyframes mathesis-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { #mathesis-toasts .mx-toast { animation: none; transition: none; } }
+      `;
+      document.head.appendChild(st);
+      box = document.createElement('div');
+      box.id = 'mathesis-toasts';
+      document.body.appendChild(box);
+    }
+    const t = document.createElement('div');
+    t.className = 'mx-toast ' + kind;
+    t.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    const text = document.createElement('div');
+    text.className = 'mx-toast-text';
+    text.textContent = message;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'mx-toast-x';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Dismiss');
+    let timer = null;
+    const remove = () => { clearTimeout(timer); t.classList.add('out'); setTimeout(() => t.remove(), 200); };
+    const arm = () => { const ms = kind === 'error' ? 0 : kind === 'ok' ? 4500 : 9000; if (ms) timer = setTimeout(remove, ms); };
+    close.addEventListener('click', remove);
+    t.addEventListener('mouseenter', () => clearTimeout(timer)); // reading it: it stays
+    t.addEventListener('mouseleave', arm);
+    t.append(text, close);
+    box.append(t);
+    while (box.children.length > 5) box.firstChild.remove();
+    arm();
+    return t;
+  }
+  toast.ok = (message) => toast(message, 'ok');
+  toast.error = (message) => toast(message, 'error');
+
   const normalizeName = (s) => (s || '').replace(/[:/\\?*"<>|]/g, '_').replace(/\s+/g, ' ').trim();
 
   // ---- page access (Udemy's markup is not documented: every selector has a fallback) ----
@@ -281,8 +337,8 @@
     } finally {
       if (previous && !previous.input.checked) previous.label.click();
     }
-    if (!wrong.length && !toReview.length) { alert('No incorrect or marked-and-correct questions in this attempt'); return null; }
-    if (warning) alert(warning.trim());
+    if (!wrong.length && !toReview.length) { toast('No incorrect or marked-and-correct questions in this attempt'); return null; }
+    if (warning) toast(warning.trim());
     const total = (all.find((p) => p.name === 'all') || {}).count;
     const attempt = attemptLabel();
     const section = (title, facts, questions) => [`# ${title}`, '', `*${[attempt, ...facts].filter(Boolean).join(' · ')}*`, '',
@@ -308,8 +364,8 @@
     } finally {
       if (previous && !previous.input.checked) previous.label.click();
     }
-    if (!questions.length) { alert('No questions found on this page'); return null; }
-    if (warning) alert(warning.trim());
+    if (!questions.length) { toast('No questions found on this page'); return null; }
+    if (warning) toast(warning.trim());
     return questions;
   }
 
@@ -1054,7 +1110,7 @@
         filePath = computePathToWrite(allQuestions);
       } catch (e) {
         console.error(e);
-        alert('Could not compute file path: ' + e.message);
+        toast.error('Could not compute file path: ' + e.message);
         return;
       }
     }
@@ -1062,13 +1118,13 @@
     const copyOnly = (why) => {
       const kept = keepOffline(kind, filePath, text); // an offline copy in this browser, and the clipboard
       return navigator.clipboard.writeText(text)
-        .then(() => alert(why + 'Copied to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
-        .catch((error) => alert('Could not copy text to clipboard: ' + error));
+        .then(() => toast.ok(why + 'Copied to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
+        .catch((error) => toast.error('Could not copy text to clipboard: ' + error));
     };
     if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
 
     if (kind === 'quiz-review' && !attemptNumber()) { // the file is named after the attempt: never guess it
-      alert('Could not find the attempt number ("Attempt N") on this page, so the review was not saved. Try again once the results have loaded.');
+      toast.error('Could not find the attempt number ("Attempt N") on this page, so the review was not saved. Try again once the results have loaded.');
       return;
     }
 
@@ -1096,14 +1152,14 @@
         console.log('[Mathesis] saved', data);
         refreshFiles();
         if (data.metadata_only) {
-          alert('Only the metadata (frontmatter) was updated. Your text is untouched.');
+          toast('Only the metadata (frontmatter) was updated. Your text is untouched.');
           return;
         }
         if (data.kept) { // a file with your own text and no metadata: the server only added the metadata
-          alert('This file already existed without metadata, so it was not overwritten: only the metadata (frontmatter) was added, and your text is untouched.');
+          toast('This file already existed without metadata, so it was not overwritten: only the metadata (frontmatter) was added, and your text is untouched.');
           return;
         }
-        alert(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
+        toast.ok(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!'
           : kind === 'quiz-all' ? 'All questions saved!' : 'Transcript sent successfully!');
       })
@@ -1112,7 +1168,7 @@
         console.error('Error:', error);
         if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
-        alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
+        toast.error('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
       });
   }
   async function saveJson() {
@@ -1123,14 +1179,14 @@
       filePath = jsonPathToWrite();
     } catch (e) {
       console.error(e);
-      alert('Could not compute file path: ' + e.message);
+      toast.error('Could not compute file path: ' + e.message);
       return;
     }
     const copyJson = (why) => {
       const kept = keepOffline('quiz-json', filePath, text); // an offline copy in this browser, and the clipboard
       return navigator.clipboard.writeText(text)
-        .then(() => alert(why + 'Copied the JSON to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
-        .catch((e) => alert('Could not copy text to clipboard: ' + e));
+        .then(() => toast.ok(why + 'Copied the JSON to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
+        .catch((e) => toast.error('Could not copy text to clipboard: ' + e));
     };
     if (!serverUp) { copyJson(''); return; } // no server: nothing is sent
     try {
@@ -1146,12 +1202,12 @@
       const data = await response.json();
       console.log('[Mathesis] saved', data);
       refreshFiles();
-      alert('All questions saved as JSON! (' + data.path + ')');
+      toast.ok('All questions saved as JSON! (' + data.path + ')');
     } catch (error) {
       console.error('Error:', error);
       if (!error.status) { copyJson('Could not reach the Mathesis server. '); return; } // it went away since the last check
       const id = await reportFailure({ kind: 'quiz-json', path: filePath, status: error.status, error: String(error.message || error), body: text });
-      alert('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
+      toast.error('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
     }
   }
 
