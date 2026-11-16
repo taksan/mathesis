@@ -479,3 +479,74 @@ def test_file_text_is_served_to_the_course_sites_only(client):
     assert client.get("/file", headers={"X-File-Path": "Udemy/C/none.md"}).status_code == 404
     _put(client, "Udemy/C/random.txt")
     assert client.get("/file", headers={"X-File-Path": "Udemy/C/random.txt"}).status_code == 403   # not a file of a page
+
+
+def _regen_client(tmp_path, **kw):
+    settings = Settings(root=tmp_path.resolve(), notify=False, obsidian_command="obs", **kw)
+    return TestClient(server.create_app(settings))
+
+
+def test_regenerate_rewrites_the_summary_and_keeps_the_old_one_on_failure(tmp_path, monkeypatch):
+    calls = []
+
+    def fake(content, file, settings):
+        calls.append(content)
+        if "boom" in content:
+            return "provider down"
+        server_summary = tmp_path / "G/C/01-Lab-summary.md"
+        server_summary.write_text("NEW summary", encoding="utf-8")
+    monkeypatch.setattr(server, "write_summary", fake)
+    with _regen_client(tmp_path, summary_provider="gemini") as c:
+        lesson = tmp_path / "G/C/01-Lab.md"
+        lesson.parent.mkdir(parents=True)
+        lesson.write_text("---\ntype: \"transcript\"\n---\nthe lesson text", encoding="utf-8")
+        (tmp_path / "G/C/01-Lab-summary.md").write_text("OLD summary", encoding="utf-8")
+        h = {"X-File-Path": "G/C/01-Lab.md", "X-Mathesis-Kind": "summary"}
+        r = c.post("/regenerate", headers=h)
+        assert r.status_code == 202 and calls == ["the lesson text"]                # frontmatter is not sent to the model
+        assert (tmp_path / "G/C/01-Lab-summary.md").read_text() == "NEW summary"
+        got = {f["kind"]: f for f in c.get("/files", headers={"X-File-Path": "G/C/01-Lab.md"}).json()["files"]}
+        assert got["summary"]["state"] == "ready"
+        lesson.write_text("boom", encoding="utf-8")
+        (tmp_path / "G/C/01-Lab-summary.md").write_text("KEPT", encoding="utf-8")
+        assert c.post("/regenerate", headers=h).status_code == 202
+        got = {f["kind"]: f for f in c.get("/files", headers={"X-File-Path": "G/C/01-Lab.md"}).json()["files"]}
+        assert got["summary"]["state"] == "failed" and got["summary"]["error"] == "provider down" and got["summary"]["path"]
+        assert (tmp_path / "G/C/01-Lab-summary.md").read_text() == "KEPT"
+
+
+def test_regenerate_refuses_what_cannot_be_done(tmp_path):
+    with _regen_client(tmp_path, summary_provider="gemini") as c:
+        (tmp_path / "G/C").mkdir(parents=True)
+        (tmp_path / "G/C/01-Lab.md").write_text("text", encoding="utf-8")
+        (tmp_path / "G/C/01-Lab-summary.md").write_text("s", encoding="utf-8")
+        ok = {"X-File-Path": "G/C/01-Lab.md", "X-Mathesis-Kind": "summary"}
+        assert c.post("/regenerate", headers={**ok, "X-Mathesis-Kind": "transcript"}).status_code == 400
+        assert c.post("/regenerate", headers={**ok, "X-File-Path": "G/C/09-None.md"}).status_code == 404
+        assert c.post("/regenerate", headers={**ok, "X-File-Path": "G/C/01-Lab-summary.md"}).status_code == 404   # not a lesson
+        assert c.post("/regenerate", headers={**ok, "X-File-Path": "../x.md"}).status_code == 403
+        assert c.post("/regenerate", headers={**ok, "X-Mathesis-Kind": "lab-guide"}).status_code == 409           # lab guides off
+        c.app.state.jobs.start((tmp_path / "G/C/01-Lab.md").resolve(), "summary")
+        r = c.post("/regenerate", headers=ok)
+        assert r.status_code == 409 and r.json()["code"] == "pending"
+    with _regen_client(tmp_path, llm=False) as c:
+        r = c.post("/regenerate", headers=ok)
+        assert r.status_code == 409 and r.json()["code"] == "llm-off"
+
+
+def test_regenerate_lab_guide_only_for_labs(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(server, "write_lab_guide", lambda content, file, settings: seen.append(content))
+    with _regen_client(tmp_path, summary_provider="none", lab_provider="gemini") as c:
+        (tmp_path / "G/C").mkdir(parents=True)
+        (tmp_path / "G/C/01-Lab.md").write_text("---\ntype: \"lab\"\n---\nlab text", encoding="utf-8")
+        (tmp_path / "G/C/02-Talk.md").write_text("---\ntype: \"transcript\"\n---\ntalk", encoding="utf-8")
+        h = {"X-Mathesis-Kind": "lab-guide"}
+        assert c.post("/regenerate", headers={**h, "X-File-Path": "G/C/02-Talk.md"}).status_code == 409
+        assert c.post("/regenerate", headers={**h, "X-File-Path": "G/C/01-Lab.md"}).status_code == 202
+        import time
+        for _ in range(50):
+            if seen:
+                break
+            time.sleep(0.05)
+        assert seen == ["lab text"]

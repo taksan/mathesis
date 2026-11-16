@@ -724,6 +724,7 @@
     content: '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>',
     copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>',
     folder: '<svg viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.4 1.6h7v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></svg>',
+    regenerate: '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.8-4.1"/><path d="M13.5 2.5v3h-3"/></svg>',
   };
 
   const ICON_SAVE = '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h8l3 3v8h-11z"/><path d="M5 2.5v3.5h5V2.5M5 13.5v-4h6v4"/></svg>';
@@ -881,7 +882,7 @@
     try { await navigator.clipboard.writeText(text); say(done); } catch (e) { say('Could not copy: ' + e.message); }
   }
   async function serverCall(path, f, headers = {}) {
-    const r = await fetch(`${SERVER}${path}`, { method: path === '/open' ? 'POST' : 'GET', headers: { 'X-File-Path': encodeURIComponent(f.path), ...headers } });
+    const r = await fetch(`${SERVER}${path}`, { method: path === '/open' || path === '/regenerate' ? 'POST' : 'GET', headers: { 'X-File-Path': encodeURIComponent(f.path), ...headers } });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status + ' ' + r.statusText);
     return r;
   }
@@ -896,10 +897,23 @@
     try { await toClipboard(await (await serverCall('/file', f)).text(), 'Content copied.'); } catch (e) { say(`Could not copy the content: ${e.message}`); }
   }
 
+  async function regenerate(f) { // summary / lab guide: the configured provider writes it again (the old file is replaced when the new one is ready)
+    const lesson = files.find((x) => x.kind === 'transcript');
+    const what = displayName(f).toLowerCase();
+    if (!lesson) { toast.error(`Could not regenerate the ${what}: the lesson itself is not saved.`); return; }
+    if (!confirm(`Regenerate the ${what}?\n\nThe AI provider writes it again from the saved lesson and replaces the current file, so any edits you made to it are lost. This can take a few minutes. If it fails, the current file is kept.`)) return;
+    try {
+      await serverCall('/regenerate', lesson, { 'X-Mathesis-Kind': f.kind });
+      toast.ok(`Regenerating the ${what}…`);
+      lastChecked = null; // ask the server again now: the row shows "writing…" until it is done
+    } catch (e) { toast.error(`Could not regenerate the ${what}: ${e.message}`); }
+  }
+
   function fileRow(f) {
     const row = document.createElement('div');
     row.className = 'mx-file' + (f.state === 'pending' ? ' wait' : '');
-    const name = document.createElement(f.state === 'ready' ? 'button' : 'span');
+    const reusable = f.state === 'failed' && f.path; // a regeneration failed: the previous file is still there
+    const name = document.createElement(f.state === 'ready' || reusable ? 'button' : 'span');
     name.className = 'mx-name';
     name.textContent = displayName(f);
     row.append(name);
@@ -910,7 +924,7 @@
       row.append(wait);
       return row;
     }
-    if (f.state === 'failed') {
+    if (f.state === 'failed' && !reusable) {
       const bad = document.createElement('span');
       bad.className = 'mx-bad';
       bad.textContent = 'failed';
@@ -922,6 +936,13 @@
     name.type = 'button';
     name.addEventListener('click', () => openFile(f));
     tipOn(name, `Open locally in ${via(f)}`);
+    if (reusable) {
+      const bad = document.createElement('span');
+      bad.className = 'mx-bad';
+      bad.textContent = 'not regenerated';
+      bad.title = `${f.error || 'see the server log'}. The previous file was kept.`;
+      row.append(bad);
+    }
     const more = document.createElement('div');
     more.className = 'mx-more';
     const toggle = document.createElement('button');
@@ -940,6 +961,7 @@
       ['content', 'Copy the content', () => copyContent(f)],
       ['copy', 'Copy file path', () => toClipboard(f.abs_path || f.path, 'Path copied.')],
       ['folder', 'Show in folder', () => showInFolder(f)],
+      ...(f.kind === 'summary' || f.kind === 'lab-guide' ? [['regenerate', 'Regenerate…', () => regenerate(f)]] : []),
     ]) {
       const item = document.createElement('button');
       item.type = 'button';

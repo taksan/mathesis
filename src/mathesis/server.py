@@ -14,6 +14,9 @@ GET  /files   Header X-File-Path: the page's main file -> {"files": [{kind, labe
               every document of the page: transcript, summary, lab guide (pending / failed while the background job runs), or for a quiz
               result the review attempts, "all questions" and its JSON
 GET  /file    Header X-File-Path: one path from /files -> its text (plain). Browsers may only ask from udemy.com / skills.google pages.
+POST /regenerate  Header X-File-Path: the lesson's main file; Header X-Mathesis-Kind: "summary" | "lab-guide" -> 202; the configured provider writes
+              it again in the background and the old file is replaced only when the new one is ready (a failure keeps it and shows as
+              "failed" with the file still listed). 409 when LLM features or that job are off, or it is already being written
 POST /open    Header X-File-Path: one path from /files: opens it in a text editor on the server machine (the "editor" opener);
               with X-Mathesis-Open: folder it shows its folder in the file manager instead
 POST /reports  JSON {url, title, kind, path, status, error, html, body, ...} -> {"id"}: an error report the userscript uploads when a save fails
@@ -42,6 +45,7 @@ from .obsidian import editor_command, find_command, have_obsidian, open_folder, 
 from .reports import ReportStore
 from .pipeline import summary_path, write_summary
 from .files import Jobs, page_files
+from .lessons import is_derived
 from .userscripts import list_scripts, render_page
 
 
@@ -247,6 +251,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"type": FILE_TYPES[kind], "course": sent.get("course") or target.parent.name,
                 "lesson": sent.get("lesson", ""), "url": sent.get("url", "")}
 
+    def lab_page(target: Path) -> bool:
+        """A lab: its frontmatter says type: lab (or a guide was already written for it)."""
+        if guide_path(target).is_file():
+            return True
+        try:
+            front, _ = frontmatter.split(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            return False
+        return any(re.fullmatch(r'type\s*:\s*"?lab"?\s*', line) for line in front or [])
+
+    def start_lab_guide(target: Path, text: str) -> None:
+        jobs.start(target, "lab-guide")
+        threading.Thread(target=jobs.run, args=(target, "lab-guide", guide_path(target), write_lab_guide, text, str(target), settings),
+                         daemon=True).start()
+
+    @app.post("/regenerate", status_code=202)
+    def regenerate(background: BackgroundTasks, x_file_path: str | None = Header(None), x_mathesis_kind: str | None = Header(None)):
+        """Write the summary or lab guide of a saved lesson again with the configured provider, replacing the file only when the
+        new one is ready (a failure keeps the old one). X-File-Path: the lesson's main file; X-Mathesis-Kind: summary | lab-guide."""
+        target = target_path(x_file_path)
+        kind = (x_mathesis_kind or "").strip().lower()
+        if kind not in ("summary", "lab-guide"):
+            raise ApiError(400, "X-Mathesis-Kind must be summary or lab-guide")
+        if target.suffix != ".md" or is_derived(target.name) or not target.is_file():
+            raise ApiError(404, "this lesson is not saved")
+        if not settings.llm:
+            raise ApiError(409, "LLM features are off (llm = false): there is no provider to regenerate with", "llm-off")
+        if not (settings.summary_enabled if kind == "summary" else settings.lab_guide_enabled):
+            raise ApiError(409, f"no provider is set for {'summaries' if kind == 'summary' else 'lab guides'}", "disabled")
+        if (jobs.get(target, kind) or {}).get("state") == "pending":
+            raise ApiError(409, "it is already being written", "pending")
+        try:
+            text = frontmatter.strip(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError) as e:
+            raise ApiError(500, f"cannot read the lesson: {e}")
+        if not text.strip():
+            raise ApiError(409, "the saved lesson is empty")
+        if kind == "summary":
+            jobs.start(target, "summary")
+            background.add_task(jobs.run, target, "summary", summary_path(target), write_summary, text, str(target), settings)
+        else:
+            if not lab_page(target):
+                raise ApiError(409, "only lab pages have a lab guide")
+            start_lab_guide(target, text)
+        return {"status": "started", "kind": kind, "path": str(target.relative_to(settings.root))}
+
     @app.post("/write")
     async def write(request: Request, background: BackgroundTasks, x_file_path: str | None = Header(None),
                     x_mathesis_kind: str | None = Header(None), x_mathesis_meta: str | None = Header(None),
@@ -289,15 +339,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         print(f"saved {kind} {len(content)} bytes -> {target}")
         if settings.notify_on_save:
             notify("Transcript saved", target.stem, enabled=settings.notify)
+        text = content.decode("utf-8", "replace")
         if settings.summary_enabled and content.strip() and kind in ("transcript", "bundle", "lab"):
             jobs.start(target, "summary")
-            background.add_task(jobs.run, target, "summary", summary_path(target), write_summary,
-                                content.decode("utf-8", "replace"), str(target), settings)
+            background.add_task(jobs.run, target, "summary", summary_path(target), write_summary, text, str(target), settings)
         if settings.lab_guide_enabled and content.strip() and kind == "lab":  # own thread: the summary may take minutes
-            jobs.start(target, "lab-guide")
-            threading.Thread(target=jobs.run, args=(target, "lab-guide", guide_path(target), write_lab_guide,
-                                                    content.decode("utf-8", "replace"), str(target), settings),
-                             daemon=True).start()
+            start_lab_guide(target, text)
         # kept: the file existed without frontmatter, so only the metadata was added and its text was left alone
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind,
                 "kept": kept}

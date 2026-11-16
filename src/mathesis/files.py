@@ -30,7 +30,7 @@ class Jobs:
     def finish(self, target: Path, kind: str, output: Path, problem: str | None = None) -> None:
         """Called when the job ends, however it ended: the file is there, or the job failed (`problem` says why)."""
         with self._lock:
-            if output.is_file():
+            if output.is_file() and not problem:   # a failed *re*generation leaves the old file: still a failure
                 self._state.pop((str(target), kind), None)
             else:
                 self._state[(str(target), kind)] = {"state": "failed", "error": problem or "not written: see the server log"}
@@ -74,10 +74,12 @@ def page_files(target: Path, root: Path, jobs: Jobs, obsidian: bool) -> list[dic
         return out
 
     for kind, label, path in [("lab-guide", "Lab guide", guide_path(target)), ("summary", "Summary", summary_path(target))]:
-        if path.is_file():
+        job = jobs.get(target, kind)
+        if job:   # pending / failed; when the file exists this is a regeneration, and the old file stays readable
+            out.append(entry(kind, label, path if path.is_file() else None, job["state"],
+                             **({"error": job["error"]} if "error" in job else {}), regenerating=path.is_file()))
+        elif path.is_file():
             out.append(entry(kind, label, path))
-        elif (job := jobs.get(target, kind)):
-            out.append(entry(kind, label, None, job["state"], **({"error": job["error"]} if "error" in job else {})))
     if target.suffix == ".md" and target.is_file():
         out.append(entry("transcript", "Transcript", target))
     return out
