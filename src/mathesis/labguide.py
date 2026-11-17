@@ -9,6 +9,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from . import gcloudcheck
 from .config import Settings
 from .llm import make_client, should_announce
 from .notify import notify
@@ -37,6 +38,36 @@ def generate(content: str, file: str | Path, settings: Settings, run=subprocess.
     guide = clean(client.chat(system, f"Lab: {title}\n\nLab instructions:\n\n{content}"))
     if len(guide.split()) < 20:
         raise RuntimeError(f"{client.label} returned no usable guide: " + guide[:200])
+    if settings.lab_check_commands and gcloudcheck.available():
+        guide = repair(guide, system, client)
+    return guide
+
+
+CHECK_ROUNDS = 2
+
+
+def repair(guide: str, system: str, client) -> str:
+    """Check the guide's gcloud commands against the real help pages and have the model fix the wrong ones (any provider).
+
+    A repaired guide replaces the old one only if it still has the guide's size and no more problems than before.
+    """
+    bad = gcloudcheck.problems(guide)
+    for _ in range(CHECK_ROUNDS):
+        if not bad:
+            break
+        message = ((PROMPT_DIR / "lab_guide_repair.txt").read_text(encoding="utf-8") + "\n\n## Guide\n\n" + guide
+                   + "\n\n## Problems\n\n" + "\n".join(f"- `{c}` -> {why}" for c, why in bad)
+                   + "\n\n## Help pages\n\n" + gcloudcheck.help_for(bad))
+        try:
+            fixed = clean(client.chat(system, message))
+        except Exception as e:   # the first guide is still good
+            print(f"Lab guide check: repair failed ({e}); keeping the guide as written")
+            break
+        now = gcloudcheck.problems(fixed)
+        if len(fixed.split()) < len(guide.split()) * 0.6 or len(now) > len(bad):
+            print("Lab guide check: the repaired guide is worse; keeping the previous one")
+            break
+        guide, bad = fixed, now
     return guide
 
 

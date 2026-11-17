@@ -156,3 +156,45 @@ def test_the_gcloud_shim_runs_help_and_refuses_everything_else(tmp_path):
     for args in (("projects", "list"), ("projects", "delete", "x", "--quiet"), ("auth", "list"), ("--help-me",), ()):
         bad = run(*args)
         assert bad.returncode == 2 and "REAL" not in bad.stdout and "only 'gcloud" in bad.stderr
+
+
+def test_repair_asks_the_model_to_fix_commands_gcloud_help_rejects(monkeypatch):
+    from mathesis import gcloudcheck
+    bad = {"gcloud a b --nope": "unknown flags ['--nope'] in `gcloud a b`"}
+    monkeypatch.setattr(gcloudcheck, "problems", lambda g: [(c, w) for c, w in bad.items() if c in g])
+    monkeypatch.setattr(gcloudcheck, "help_for", lambda b: "HELP PAGE")
+    seen = []
+
+    class Model:
+        def chat(self, system, user):
+            seen.append(user)
+            return "```bash\ngcloud a b --yes\n```\n" + "word " * 50
+
+    first = "```bash\ngcloud a b --nope\n```\n" + "word " * 50
+    fixed = labguide.repair(first, "sys", Model())
+    assert "--yes" in fixed and "--nope" not in fixed
+    assert "unknown flags" in seen[0] and "HELP PAGE" in seen[0] and len(seen) == 1   # fixed in one round: no second call
+
+
+def test_repair_keeps_the_guide_when_the_fix_is_worse(monkeypatch):
+    from mathesis import gcloudcheck
+    monkeypatch.setattr(gcloudcheck, "problems", lambda g: [("c", "w")] * (1 if "old" in g else 3))
+    monkeypatch.setattr(gcloudcheck, "help_for", lambda b: "")
+
+    class Model:
+        def chat(self, system, user):
+            return "new " * 100
+
+    old = "old " * 100
+    assert labguide.repair(old, "sys", Model()) == old
+
+
+def test_gcloudcheck_flags_unknown_flags_and_commands(monkeypatch):
+    from mathesis import gcloudcheck
+    pages = {("a",): "GROUPS\n", ("a", "b"): "SYNOPSIS\n  gcloud a b [--ok]\n\nFLAGS\n  --ok\n\nGCLOUD WIDE FLAGS\n"}
+    monkeypatch.setattr(gcloudcheck, "help_text", lambda path: pages.get(tuple(path)))
+    assert gcloudcheck.check("gcloud a b --ok") == "ok"
+    assert "unknown flags ['--nope']" in gcloudcheck.check("gcloud a b --nope")
+    assert gcloudcheck.check("gcloud zzz x").startswith("unknown command")
+    guide = "```bash\ngcloud a b \\\n  --nope\n# gcloud a b --ok\n```"
+    assert [c for c, _ in gcloudcheck.problems(guide)] == ["gcloud a b  --nope"]

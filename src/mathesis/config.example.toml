@@ -25,7 +25,8 @@
 # provider = "claude-code"
 # model = "..."
 # enabled = true
-# check_commands = false   # Claude Code only: let it read `gcloud ... --help` (nothing else; no account, no project) before it writes
+# check_commands = false   # check each gcloud command against the installed `gcloud --help` and have the model fix wrong flags (any provider).
+#                          # Claude Code additionally may read `gcloud ... --help` (nothing else; no account, no project) before it writes
 #                          # each command, so flags are the real ones. Slower and costs more; needs gcloud installed. MATHESIS_LAB_CHECK=1
 
 [server]
