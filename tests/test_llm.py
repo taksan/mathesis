@@ -177,3 +177,13 @@ def test_startup_complains_once_when_the_key_is_missing(tmp_path, monkeypatch):
     with TestClient(server.create_app(settings)):
         pass
     assert notes == []
+
+
+def test_openrouter_is_builtin_and_needs_its_key_and_a_model(monkeypatch):
+    spec = Settings().provider_spec("openrouter", "google/gemini-4-hydrogen")
+    assert spec["type"] == "openai" and spec["url"] == "https://openrouter.ai/api/v1" and spec["model"] == "google/gemini-4-hydrogen"
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    ok, msg = OpenAIClient(spec).check()
+    assert not ok and "OPENROUTER_API_KEY" in msg
+    ok, msg = OpenAIClient(Settings().provider_spec("openrouter")).check()
+    assert not ok and "no model" in msg

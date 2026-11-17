@@ -146,7 +146,7 @@ def test_api_keys_come_from_conventional_environment_variables(tmp_path):
         "GEMINI_API_KEY", "OPENAI_API_KEY", "BIG_ROUTER_API_KEY")
     s = Settings()
     assert s.provider_spec("gemini")["api_key_env"] == "GEMINI_API_KEY" and s.provider_spec("gemini")["key_required"]
-    custom = Settings(providers={"openrouter": {"type": "openai", "url": "http://x/v1"}})
+    custom = Settings(providers={"openrouter": {"type": "openai", "url": "http://x/v1", "key_required": False}})
     spec = custom.provider_spec("openrouter")
     assert spec["api_key_env"] == "OPENROUTER_API_KEY" and not spec.get("key_required")
 

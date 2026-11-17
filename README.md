@@ -62,14 +62,14 @@ Settings come from `config.toml`, then `MATHESIS_*` environment variables, then 
 
 ```toml
 llm = true                       # false (the default of the first-run questions): no AI at all
-provider = "gemini"              # ollama | gemini | openai | claude-code | none
+provider = "gemini"              # ollama | gemini | openai | openrouter | claude-code | none
 [server]
 root = "~/mathesis-notes"        # the only folder the server may write into
 [lab_guide]
 provider = "claude-code"         # optional: a different provider for one job ([summary] works the same)
 ```
 
-API keys are never stored in the config: export `GEMINI_API_KEY` / `OPENAI_API_KEY` (or put them in a gitignored `.env` next to `config.toml`).
+API keys are never stored in the config: export `GEMINI_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` (or put them in a gitignored `.env` next to `config.toml`).
 
 | Variable                                             | Default                                 |                                           |
 |------------------------------------------------------|-----------------------------------------|-------------------------------------------|

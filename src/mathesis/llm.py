@@ -5,7 +5,7 @@ chat(system, user, temperature) -> text.  When check() fails the callers skip th
 saved lesson: nothing breaks because a backend is down or not configured.
 
   ollama       a local Ollama server (native /api/chat, so the context window can be set)
-  openai       any OpenAI-compatible /chat/completions API: Gemini (built in as "gemini"), OpenAI, OpenRouter, LM Studio...
+  openai       any OpenAI-compatible /chat/completions API: Gemini, OpenAI and OpenRouter (built in), LM Studio...
   claude-code  the `claude` CLI, headless (claude -p): no tools, no session, an empty temporary folder
 """
 import json

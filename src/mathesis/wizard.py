@@ -10,9 +10,10 @@ PROVIDERS = [
     ("ollama", "Ollama: local models, no key (needs `ollama pull gemma4:12b`)"),
     ("gemini", "Gemini: Google API, key in GEMINI_API_KEY"),
     ("openai", "OpenAI: API, key in OPENAI_API_KEY"),
+    ("openrouter", "OpenRouter: many vendors' models with one key, key in OPENROUTER_API_KEY"),
     ("claude-code", "Claude Code: the `claude` CLI and your Claude Code login"),
 ]
-NEEDS_KEY = {"gemini", "openai"}
+NEEDS_KEY = {"gemini", "openai", "openrouter"}
 
 
 def ask_text(ask, prompt: str, default: str) -> str:
@@ -88,8 +89,10 @@ def run_init(target: Path, force: bool = False, ask=None, out=print, starting: b
         jobs[key] = None if picked == default else picked
     used = set() if default == "none" else {default, *(v for v in jobs.values() if v and v != "none")}
     models = {}
-    if "openai" in used:  # the only built-in provider without a default model
+    if "openai" in used:  # built-in providers without a default model
         models["openai"] = ask_text(ask, "OpenAI model name", "gpt-4.1-mini")
+    if "openrouter" in used:
+        models["openrouter"] = ask_text(ask, "OpenRouter model id (vendor/model, see openrouter.ai/models)", "google/gemini-4-hydrogen")
 
     root_dir.mkdir(parents=True, exist_ok=True)
     target.parent.mkdir(parents=True, exist_ok=True)

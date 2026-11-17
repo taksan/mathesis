@@ -100,7 +100,7 @@ Settings can live in a TOML file: `--config`, else `$MATHESIS_CONFIG`, else `con
 One **provider** serves everything (summaries and lab guides); a job overrides it only when it needs something different:
 
 ```toml
-provider = "gemini"            # the one provider: ollama | gemini | openai | claude-code | <your own table> | none
+provider = "gemini"            # the one provider: ollama | gemini | openai | openrouter | claude-code | <your own table> | none
 
 [summary]                      # optional: only what differs from the above
 # model = "gemini-3.8-flash"   # another model of the same provider

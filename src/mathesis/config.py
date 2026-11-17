@@ -24,6 +24,7 @@ BUILTIN_PROVIDERS = {
     "claude-code": {"type": "claude-code"},
     "gemini": {"type": "openai", "url": GEMINI_URL, "model": "gemini-3.8-flash", "key_required": True},
     "openai": {"type": "openai", "url": "https://api.openai.com/v1", "key_required": True},
+    "openrouter": {"type": "openai", "url": "https://openrouter.ai/api/v1", "key_required": True},   # one key, many vendors' models
 }
 PROVIDER_TYPES = ("ollama", "openai", "claude-code")
 

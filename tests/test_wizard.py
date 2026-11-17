@@ -71,7 +71,7 @@ def test_gemini_default_with_overrides_and_key_instructions(tmp_path):
 
 
 def test_summaries_and_labs_can_be_switched_off(tmp_path):
-    code, target, _ = run(tmp_path, str(tmp_path / "n"), "gemini", "5", "5")
+    code, target, _ = run(tmp_path, str(tmp_path / "n"), "gemini", "none", "none")
     s = Settings.from_env(target)
     assert (s.summary_provider, s.lab_provider) == ("none", "none") and not s.summary_enabled and not s.lab_guide_enabled
 
@@ -143,3 +143,10 @@ def test_cancelled_first_run_writes_nothing(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         cli.first_run_setup(_args("doctor"), interactive=True)
     assert e.value.code == 130 and not target.exists()
+
+
+def test_openrouter_asks_for_a_model_and_its_key(tmp_path):
+    code, target, text = run(tmp_path, str(tmp_path / "n"), "openrouter", "", "", "vendor/model")
+    s = Settings.from_env(target)
+    assert code == 0 and s.summary_provider == "openrouter" and s.provider_spec("openrouter")["model"] == "vendor/model"
+    assert "OPENROUTER_API_KEY" in text
