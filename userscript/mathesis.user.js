@@ -395,20 +395,16 @@
   const statusEl = document.createElement('div');
   statusEl.id = 'mathesis-status';
   statusEl.setAttribute('role', 'status');
-  const FOLD_KEY = 'mathesis-panel-folded';
   const setFolded = (folded, remember) => {
     panel.classList.toggle('folded', folded);
     fold.textContent = folded ? '+' : '–';
     fold.title = fold.ariaLabel = folded ? 'Expand' : 'Collapse';
     mark.title = mark.ariaLabel = folded ? 'Mathesis: click to expand' : 'Mathesis: click to collapse';
-    if (remember) { try { localStorage.setItem(FOLD_KEY, folded ? '1' : '0'); } catch (e) { /* not remembered */ } }
   };
   fold.addEventListener('click', () => setFolded(!panel.classList.contains('folded'), true));
   // the icon toggles the fold: a pointer click is decided when the pointer is released (the header owns the drag, so the click never reaches the icon)
   mark.addEventListener('click', (e) => { if (e.detail === 0) setFolded(!panel.classList.contains('folded'), true); }); // keyboard: a pointer click is handled with the drag, below
-  let startFolded = true; // folded until the person unfolds it once (that choice is remembered)
-  try { startFolded = localStorage.getItem(FOLD_KEY) !== '0'; } catch (e) { /* storage blocked */ }
-  setFolded(startFolded, false);
+  setFolded(true, false); // every page starts folded; unfolding is for that visit only
 
   // Drag the header to move the panel; the position is remembered per site and kept inside the window.
   // Double-click the header to put the panel back where it started.
