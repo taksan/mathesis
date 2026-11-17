@@ -550,3 +550,17 @@ def test_regenerate_lab_guide_only_for_labs(tmp_path, monkeypatch):
                 break
             time.sleep(0.05)
         assert seen == ["lab text"]
+
+
+def test_write_while_generating_does_nothing(client):
+    target = _put(client, "G/C/01-Lab.md").resolve()
+    before = target.read_text(encoding="utf-8")
+    jobs = client.app.state.jobs
+    jobs.start(target, "lab-guide")   # the AI is still writing
+    r = client.post("/write", content="new text", headers={"X-File-Path": "G/C/01-Lab.md", "X-Mathesis-Kind": "lab"})
+    assert r.status_code == 409 and r.json()["code"] == "pending"
+    assert target.read_text(encoding="utf-8") == before            # nothing saved
+    assert jobs.get(target, "summary") is None                      # and no second job started
+    jobs.finish(target, "lab-guide", target.with_name("01-Lab-lab-guide.md"), "stopped")
+    jobs.finish(target, "lab-guide", target.with_name("01-Lab-lab-guide.md"))
+    assert client.post("/write", content="new text", headers={"X-File-Path": "G/C/01-Lab.md", "X-Mathesis-Kind": "lab"}).status_code == 200   # finished (failed): saving works again

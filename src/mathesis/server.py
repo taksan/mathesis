@@ -7,6 +7,7 @@ POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body:
               A file whose body no longer matches the hash in its frontmatter (the person added notes) is not overwritten either:
               409 {"error", "code": "modified"} unless the request has X-Mathesis-Overwrite: yes (replace it) or metadata (keep the
               text, only update the frontmatter: "metadata_only": true in the answer)
+              409 {"code": "pending"} while a summary / lab guide of that file is still being written: nothing is saved or started
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
 GET  /status  Header X-File-Path: -> {"exists": bool, "modified": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
@@ -306,6 +307,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         kind = (x_mathesis_kind or "transcript").strip().lower()
         if kind == "raw" and target.suffix != ".html":
             raise ApiError(400, "raw saves must use an .html path")
+        busy = [k for k in ("summary", "lab-guide") if (jobs.get(target, k) or {}).get("state") == "pending"]
+        if busy:   # a second click while the AI is still writing: do nothing (no second job, and the file under the job is not touched)
+            raise ApiError(409, "generation in progress: the summary / lab guide of this page is still being written", "pending")
         content = await request.body()
         if kind == "bundle":
             try:

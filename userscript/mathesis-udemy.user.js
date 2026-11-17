@@ -888,7 +888,7 @@
   }
   async function serverCall(path, f, headers = {}) {
     const r = await fetch(`${SERVER}${path}`, { method: path === '/open' || path === '/regenerate' ? 'POST' : 'GET', headers: { 'X-File-Path': encodeURIComponent(f.path), ...headers } });
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status + ' ' + r.statusText);
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw Object.assign(new Error(d.error || r.status + ' ' + r.statusText), { code: d.code }); }
     return r;
   }
   async function openFile(f) {
@@ -906,12 +906,13 @@
     const lesson = files.find((x) => x.kind === 'transcript');
     const what = displayName(f).toLowerCase();
     if (!lesson) { toast.error(`Could not regenerate the ${what}: the lesson itself is not saved.`); return; }
+    if (files.some((x) => x.state === 'pending')) { toast('Generation in progress… wait for it to finish.'); return; }
     if (!confirm(`Regenerate the ${what}?\n\nThe AI provider writes it again from the saved lesson and replaces the current file, so any edits you made to it are lost. This can take a few minutes. If it fails, the current file is kept.`)) return;
     try {
       await serverCall('/regenerate', lesson, { 'X-Mathesis-Kind': f.kind });
       toast.ok(`Regenerating the ${what}…`);
       lastChecked = null; // ask the server again now: the row shows "writing…" until it is done
-    } catch (e) { toast.error(`Could not regenerate the ${what}: ${e.message}`); }
+    } catch (e) { if (e.code === 'pending') toast('Generation in progress… wait for it to finish.'); else toast.error(`Could not regenerate the ${what}: ${e.message}`); }
   }
 
   function fileRow(f) {
@@ -1155,6 +1156,8 @@
       return;
     }
 
+    if (files.some((f) => f.state === 'pending')) { toast('Generation in progress… wait for it to finish.'); return; } // a summary / lab guide is still being written: do nothing
+
     const send = (overwrite) => fetch(`${SERVER}/write`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': kind, 'X-Mathesis-Meta': metaHeader(),
@@ -1192,6 +1195,7 @@
       })
       .catch(async (error) => {
         if (error.cancelled) return;
+        if (error.code === 'pending') { toast('Generation in progress… wait for it to finish.'); return; } // another tab started it
         console.error('Error:', error);
         if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
