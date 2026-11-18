@@ -283,6 +283,12 @@ def _rise_item(item: dict, out: list[str], heading: str, in_list: str | None, nu
             options.append(f"- {'✅' if answer.get('correct') else '⬜'} {text}")
     if options:
         out.append("\n".join(options))
+    if options:  # what the course says after answering (often the explanation); a bare "Correct" / "Incorrect" says nothing
+        for key, label in (("feedbackCorrect", "Correct"), ("feedbackIncorrect", "Incorrect"), ("feedback", "Feedback")):
+            text = to_md(item.get(key))
+            if re.sub(r"[^a-z]", "", text.lower()) not in ("", "correct", "incorrect", "feedback"):
+                lead = "" if text.lower().startswith(label.lower()) else f"**{label}:** "   # "Correct! ..." already says it
+                out.append("> " + lead + text.replace("\n", "\n> "))
     for side in ("front", "back"):  # flash cards and stacks (a front that is only an image has just an alt text)
         card = item.get(side)
         if isinstance(card, dict) and card.get("type") not in ("fullimage",):

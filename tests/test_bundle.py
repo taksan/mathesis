@@ -172,11 +172,12 @@ def test_rise_knowledge_check_keeps_its_options_and_marks_the_right_ones():
     check = {"type": "knowledgeCheck", "variant": "multiple choice", "items": [{
         "type": "MULTIPLE_CHOICE", "title": "<p>Which mode?</p>",
         "answers": [{"title": "<p>Quick</p>", "correct": False}, {"title": "<p>Deep</p>", "correct": True}, {"title": "", "correct": False}],
-        "feedbackCorrect": "<p>Yes</p>"}]}
+        "feedbackCorrect": "<p>Correct! Deep reads every source.</p>", "feedbackIncorrect": "<p>Incorrect</p>"}]}
     lesson = {"id": "lesson-aaaa1111", "type": "blocks", "title": "Modes", "items": [check]}
     bundle._cache.clear()
     md = bundle.markdown_for(RISE, fetch_text=_rise_fetch([lesson]))
     assert "**Which mode?**\n\n- ⬜ Quick\n- ✅ Deep" in md and md.count("- ") == 2
+    assert "> Correct! Deep reads every source." in md and "Incorrect" not in md   # a bare "Incorrect" is dropped
 
 
 def test_rise_unknown_lesson_and_bad_payload():
