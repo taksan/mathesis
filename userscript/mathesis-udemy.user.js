@@ -732,14 +732,21 @@
   const ICON_SAVE = '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h8l3 3v8h-11z"/><path d="M5 2.5v3.5h5V2.5M5 13.5v-4h6v4"/></svg>';
   // Folded: one button does the main action of the page (the first chip: the transcript, or the quiz to review).
   let quickSpec = null;
-  quick.addEventListener('click', () => { if (quickSpec) quickSpec.save(); });
-  tipOn(quick, () => (quickSpec ? `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}` : ''));
+  // the file this button's action already made: then the button opens it (to save again, or for the other files, unfold the panel)
+  const quickFile = () => (quickSpec && serverUp ? files.find((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready') : null);
+  quick.addEventListener('click', () => { const f = quickFile(); if (f) openFile(f); else if (quickSpec) quickSpec.save(); });
+  tipOn(quick, () => {
+    if (!quickSpec) return '';
+    const f = quickFile();
+    if (f) return `Open · ${displayName(f)} in ${via(f)}. Unfold the panel (μ) to save again or for the other files.`;
+    return `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}`;
+  });
   function updateQuick(specs) {
     quickSpec = specs[0] || null;
     quick.style.display = quickSpec ? '' : 'none';
     quick.textContent = '';
     if (!quickSpec) return;
-    quick.insertAdjacentHTML('beforeend', serverUp ? ICON_SAVE : ICONS.copy);
+    quick.insertAdjacentHTML('beforeend', quickFile() ? ICONS.open : serverUp ? ICON_SAVE : ICONS.copy);
     if (serverUp && files.some((f) => f.state === 'pending')) { // a summary / lab guide is being written: a spinner instead of the dot
       const spin = document.createElement('span');
       spin.className = 'mx-spin mx-quick-spin';
@@ -749,7 +756,7 @@
       dot.className = 'mx-saved';
       quick.append(dot);
     }
-    quick.setAttribute('aria-label', `${serverUp ? 'Save' : 'Copy'} ${quickSpec.chip}`);
+    quick.setAttribute('aria-label', quickFile() ? `Open ${displayName(quickFile())}` : `${serverUp ? 'Save' : 'Copy'} ${quickSpec.chip}`);
   }
 
   const displayName = (f) => ({

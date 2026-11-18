@@ -23,7 +23,7 @@ Then, with the server running, install the scripts from `http://127.0.0.1:5000/u
 
 ## Use
 
-Open a lesson, lab or quiz-results page. The **μ** panel appears at the top right (it starts folded: click the μ to open it, or use the single save button, which does the page's main action).
+Open a lesson, lab or quiz-results page. The **μ** panel appears at the top right (it starts folded: click the μ to open it, or use the single button, which saves the page's main file, and once it is saved opens it instead).
 
 | Page                 | Chip                 | Saves                                                                |
 |----------------------|----------------------|----------------------------------------------------------------------|
