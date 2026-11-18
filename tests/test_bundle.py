@@ -79,7 +79,7 @@ def test_page_is_rendered_in_reading_order_as_markdown():
     assert "Transcript: You are heading to e-commerce." in md
     assert "```sql\nSELECT 1;\n```" in md
     assert "| Pillar | Goal |\n| --- | --- |\n| Cost | a\\|b |" in md
-    assert "- ✅ Yes\n\n- ⬜ No" in md or "- ✅ Yes\n- ⬜ No" in md
+    assert "- [ ] Yes\n- [ ] No\n\n> [!success]- Answer\n> ✅ Yes" in md
     for absent in ("editor label", "editor title", "Select the item", "[Add text]", "Add subtitle", "hidden", "another page", "&nbsp;"):
         assert absent not in md
 
@@ -176,8 +176,8 @@ def test_rise_knowledge_check_keeps_its_options_and_marks_the_right_ones():
     lesson = {"id": "lesson-aaaa1111", "type": "blocks", "title": "Modes", "items": [check]}
     bundle._cache.clear()
     md = bundle.markdown_for(RISE, fetch_text=_rise_fetch([lesson]))
-    assert "**Which mode?**\n\n- ⬜ Quick\n- ✅ Deep" in md and md.count("- ") == 2
-    assert "> Correct! Deep reads every source." in md and "Incorrect" not in md   # a bare "Incorrect" is dropped
+    assert "**Which mode?**\n\n- [ ] Quick\n- [ ] Deep\n\n> [!success]- Answer\n> ✅ Deep\n>\n> Correct! Deep reads every source." in md
+    assert md.count("- [ ]") == 2 and "Incorrect" not in md   # a bare "Incorrect" is dropped
 
 
 def test_rise_unknown_lesson_and_bad_payload():

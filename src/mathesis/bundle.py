@@ -154,14 +154,29 @@ def render_node(node, out: list[str], depth: int = 0, in_transcript: bool = Fals
             render_node(node[key], out, depth + 1, in_transcript or key == "_transcript")
 
 
+def question_block(options: list[tuple[str, bool]], feedback: list[tuple[str, str]] = ()) -> list[str]:
+    """A multiple-choice question as it is answered in the course: the options as an unticked list, and the right answer (with the
+    course's feedback) in an Obsidian callout that starts collapsed, so the note can be used as practice. Parts for `out`."""
+    if not options:
+        return []
+    parts = ["\n".join(f"- [ ] {text}" for text, _ in options)]
+    right = [text for text, correct in options if correct]
+    lines = [f"✅ {text}" for text in right]
+    for label, text in feedback:  # what the course says after answering (often the explanation); a bare "Correct" says nothing
+        if re.sub(r"[^a-z]", "", text.lower()) not in ("", "correct", "incorrect", "feedback"):
+            lead = "" if text.lower().startswith(label.lower()) else f"**{label}:** "   # "Correct! ..." already says it
+            lines += ["", lead + text]
+    if right:
+        parts.append("> [!success]- Answer\n" + "\n".join(("> " + l).rstrip().replace("\n", "\n> ") for l in lines))
+    return parts
+
+
 def _render_mcq(node: dict, out: list[str]) -> None:
     question = to_md(node.get("body"))
     if question:
         out.append(question)
-    for i, item in enumerate(node.get("_items") or []):
-        text = one_line(item.get("text"))
-        if text:
-            out.append(f"- {'✅' if item.get('_shouldBeSelected') else '⬜'} {text}")
+    out += question_block([(one_line(i.get("text")), bool(i.get("_shouldBeSelected"))) for i in node.get("_items") or []
+                           if one_line(i.get("text"))])
 
 
 # ------------------------------------------------------------------ pages
@@ -276,19 +291,9 @@ def _rise_item(item: dict, out: list[str], heading: str, in_list: str | None, nu
             elif in_list == "bulleted":
                 text = f"- {text}"
             out.append(text)
-    options = []  # knowledge check: the options, the right ones marked (as in the Adapt quizzes), one list
-    for answer in item.get("answers") or []:
-        text = one_line(answer.get("title")) if isinstance(answer, dict) else ""
-        if text:
-            options.append(f"- {'✅' if answer.get('correct') else '⬜'} {text}")
-    if options:
-        out.append("\n".join(options))
-    if options:  # what the course says after answering (often the explanation); a bare "Correct" / "Incorrect" says nothing
-        for key, label in (("feedbackCorrect", "Correct"), ("feedbackIncorrect", "Incorrect"), ("feedback", "Feedback")):
-            text = to_md(item.get(key))
-            if re.sub(r"[^a-z]", "", text.lower()) not in ("", "correct", "incorrect", "feedback"):
-                lead = "" if text.lower().startswith(label.lower()) else f"**{label}:** "   # "Correct! ..." already says it
-                out.append("> " + lead + text.replace("\n", "\n> "))
+    answers = [(one_line(a.get("title")), bool(a.get("correct"))) for a in item.get("answers") or [] if isinstance(a, dict)]
+    out += question_block([a for a in answers if a[0]], [(label, to_md(item.get(key))) for key, label in
+                          (("feedbackCorrect", "Correct"), ("feedbackIncorrect", "Incorrect"), ("feedback", "Feedback"))])
     for side in ("front", "back"):  # flash cards and stacks (a front that is only an image has just an alt text)
         card = item.get(side)
         if isinstance(card, dict) and card.get("type") not in ("fullimage",):
