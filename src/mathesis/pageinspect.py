@@ -2,8 +2,9 @@
 
 Only with `mathesis serve --inspect`. The flow:
 
-    page (userscript, after you click "AI")  --register / long-poll-->  server  <--call (token)--  `mathesis inspect ...`
-                                              <--commands, results--
+    page (userscript, after you click "AI")  --register-->  server  <--call (token)--  `mathesis inspect ...`
+                                             <--commands (Server-Sent Events stream)--
+                                             --answers (POST)-->
 
 * The page asks first and answers only read-only questions (the DOM: outline, html, text, query, count, plus what the userscript's
   own parser makes of the page). There is no way to run JavaScript or click anything. Passwords and form values are never sent.
@@ -20,7 +21,8 @@ OPS = ("info", "outline", "html", "text", "query", "count", "parse")
 MAX_PAGES = 20
 MAX_RESULT = 3_000_000       # bytes of one answer
 STALE = 90                   # seconds without a poll: the page is gone (closed, navigated away)
-POLL_WAIT = 20               # seconds a poll waits for a command
+STREAM_TICK = 1.0            # seconds the stream waits for a command before checking that the page is still listening
+PING_EVERY = 10              # seconds between SSE comments that keep the connection (and the page's staleness clock) alive
 
 
 class InspectError(Exception):
@@ -67,7 +69,18 @@ class Hub:
             raise InspectError(404, "this page is not shared (any more)")
         return page
 
-    def poll(self, secret: str, wait: float = POLL_WAIT) -> dict | None:
+    def known(self, secret: str) -> bool:
+        with self.cond:
+            return secret in self.pages
+
+    def requeue(self, secret: str, command: dict) -> None:
+        """A command taken for a stream that closed before it could be sent goes back to the front."""
+        with self.cond:
+            if secret in self.pages:
+                self.pages[secret].queue.appendleft(command)
+                self.cond.notify_all()
+
+    def poll(self, secret: str, wait: float = STREAM_TICK) -> dict | None:
         """The next command for the page, waiting up to `wait` seconds for one."""
         deadline = time.time() + wait
         with self.cond:
@@ -121,3 +134,25 @@ class Hub:
                     raise InspectError(504, "the page did not answer (closed, asleep in a background tab, or the sharing was stopped)")
                 self.cond.wait(min(left, 1.0))
             return page.answers.pop(command_id)
+
+
+async def events(hub: Hub, secret: str, disconnected, run_blocking):
+    """The SSE body for one page: a `data:` line per command, `: ping` comments in between, ending when the client is gone
+    or the page is no longer shared. `disconnected()` and `run_blocking(fn, *args)` are the request's (async) hooks."""
+    import json
+    last = time.time()
+    yield ": mathesis inspect stream\n\n"
+    while not await disconnected():
+        try:
+            command = await run_blocking(hub.poll, secret, STREAM_TICK)
+        except InspectError:
+            return
+        if command:
+            if await disconnected():
+                hub.requeue(secret, command)
+                return
+            yield f"data: {json.dumps(command)}\n\n"
+            last = time.time()
+        elif time.time() - last >= PING_EVERY:
+            yield ": ping\n\n"
+            last = time.time()

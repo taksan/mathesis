@@ -10,6 +10,7 @@ POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body:
               409 {"code": "pending"} while a summary / lab guide of that file is still being written: nothing is saved or started
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
               fetches the lesson, converts it to Markdown, saves it and summarizes it); "lab" (lab instructions: summarized like a transcript, and Claude Code also writes <lesson>-lab-guide.md with gcloud/terraform steps); "raw" (whole page HTML, .html path) and any other kind ("quiz", "quiz-review", "quiz-all", "quiz-json") are saved as is
+GET  /inspect/stream  (only with --inspect) SSE commands for a shared page; see pageinspect.py
 GET  /status  Header X-File-Path: -> {"exists": bool, "modified": bool, "summary_exists": bool, "opener": "obsidian" | "editor", "obsidian_uri": str | null}
 GET  /files   Header X-File-Path: the page's main file -> {"files": [{kind, label, state "ready"|"pending"|"failed", path, opener "obsidian"|"editor", obsidian_uri?, attempt?, error?}]}
               every document of the page: transcript, summary, lab guide (pending / failed while the background job runs), or for a quiz
@@ -34,7 +35,7 @@ from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from . import bundle, frontmatter
@@ -106,10 +107,14 @@ def _inspect_routes(app: FastAPI, settings: Settings) -> None:
         print(f"inspect: page {page.number} shared: {page.url}")
         return {"id": page.secret, "page": page.number}
 
-    @app.get("/inspect/poll")
-    def inspect_poll(request: Request, id: str):
+    @app.get("/inspect/stream")
+    async def inspect_stream(request: Request, id: str):
+        """Server-Sent Events: each command for the page is one `data:` line (the page answers with POST /inspect/answer)."""
         from_page(request)
-        return {"command": guarded(lambda: hub.poll(id))}
+        if not hub.known(id):
+            raise ApiError(404, "this page is not shared (any more)")
+        return StreamingResponse(inspect_mode.events(hub, id, request.is_disconnected, run_in_threadpool), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.post("/inspect/answer")
     async def inspect_answer(request: Request, id: str, command: str):

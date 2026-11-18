@@ -942,7 +942,7 @@
     ai.textContent = 'AI';
     ai.style.display = 'none';
     head.insertBefore(ai, fold);
-    let sid = null, sharing = false, answered = 0, loopToken = 0;
+    let sid = null, sharing = false, answered = 0, loopToken = 0, stream = null;
     const nap = (ms) => new Promise((r) => setTimeout(r, ms));
     const clip = (s, n) => (s.length > n ? s.slice(0, n) + `…[+${s.length - n} chars]` : s);
     const num = (v, d, max) => Math.min(Math.max(parseInt(v, 10) || d, 1), max);
@@ -1035,28 +1035,37 @@
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
       sid = (await r.json()).id;
     }
-    async function loop(token) {
-      while (sharing && token === loopToken) {
+    function open(token) { // commands arrive as Server-Sent Events; each is answered with a POST
+      const es = new EventSource(`${SERVER}/inspect/stream?id=${encodeURIComponent(sid)}`);
+      stream = es;
+      es.onmessage = async (ev) => {
+        if (token !== loopToken) return;
+        let cmd;
+        try { cmd = JSON.parse(ev.data); } catch (e) { return; }
+        const result = await execute(cmd);
         try {
-          const r = await fetch(`${SERVER}/inspect/poll?id=${encodeURIComponent(sid)}`);
-          if (r.status === 404) { await register(); continue; } // the server restarted and forgot this page
-          const cmd = (await r.json()).command;
-          if (cmd) {
-            const result = await execute(cmd);
-            await fetch(`${SERVER}/inspect/answer?id=${encodeURIComponent(sid)}&command=${encodeURIComponent(cmd.id)}`,
-              { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(result) });
-            answered++; show();
-          }
-        } catch (e) { await nap(2000); }
-      }
+          await fetch(`${SERVER}/inspect/answer?id=${encodeURIComponent(sid)}&command=${encodeURIComponent(cmd.id)}`,
+            { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(result) });
+          answered++; show();
+        } catch (e) { /* the server went away: the stream reconnects or ends below */ }
+      };
+      es.onerror = async () => {
+        // the browser reconnects by itself after a dropped connection; CLOSED means the server refused (it restarted and forgot this page)
+        if (es.readyState !== EventSource.CLOSED || token !== loopToken) return;
+        es.close();
+        while (sharing && token === loopToken) {
+          try { await register(); open(token); return; } catch (e) { await nap(3000); }
+        }
+      };
     }
     async function start() {
       try { await register(); } catch (e) { toast.error('Could not share the page: ' + e.message); return; }
-      sharing = true; answered = 0; show(); loop(++loopToken);
+      sharing = true; answered = 0; show(); open(++loopToken);
       toast.ok('The AI can now inspect this page (read-only: it cannot run code or click; passwords and form values are never sent). Click AI again to stop.');
     }
     function stop(quiet) {
       sharing = false; loopToken++;
+      if (stream) { stream.close(); stream = null; }
       const id = sid; sid = null;
       if (id) { try { navigator.sendBeacon(`${SERVER}/inspect/close?id=${encodeURIComponent(id)}`); } catch (e) { /* closed anyway: it goes stale */ } }
       show();

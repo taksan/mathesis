@@ -63,8 +63,9 @@ def cmd_serve(args) -> int:
         **({"MATHESIS_CONFIG": str(s.config_path)} if s.config_path else {}),
     })
     package_dir = str(Path(__file__).resolve().parent)
+    # an open inspect stream (SSE) would otherwise hold a stop or a reload until the page lets go
     uvicorn.run("mathesis.server:app", host=s.host, port=s.port, reload=not args.no_reload,
-                reload_dirs=[package_dir])
+                reload_dirs=[package_dir], timeout_graceful_shutdown=3)
     return 0
 
 
