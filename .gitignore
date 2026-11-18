@@ -10,6 +10,7 @@ eval/out/
 /config.toml
 /config.toml.b*
 /.env
+/.mathesis-inspect-token
 
 # saved lesson page: contains account ids and the full course page, keep it local only
 archive/sample.html

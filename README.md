@@ -38,6 +38,8 @@ Open a lesson, lab or quiz-results page. The **μ** panel appears at the top rig
 - Files you edited are never overwritten silently: the server asks first.
 - Shift twice hides the panel.
 
+Debugging a page the script cannot read: `mathesis serve --inspect` adds an **AI** button to the panel; click it on that page and an AI (Claude Code, with `mathesis inspect`) can read the page's HTML read-only, per visit, until you click again. See [docs/reference.md](docs/reference.md#inspect-mode).
+
 Other commands: `mathesis doctor` (checks everything), `mathesis summarize PATH` (summaries for existing files), `mathesis config` (show settings), `mathesis config --init --force` (redo the questions).
 
 ## Using offline - no server

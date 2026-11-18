@@ -13,6 +13,13 @@ from pathlib import Path
 DEFAULT_ROOT = "/home/takeuchi/projects/obsidian-takvault/_study_roadmap"
 DEFAULT_REPORTS = Path(tempfile.gettempdir()) / "mathesis-reports"
 DEFAULT_USERSCRIPTS = Path(__file__).resolve().parents[2] / "userscript"  # the repo folder (source checkout)
+DEFAULT_INSPECT_TOKEN = Path(__file__).resolve().parents[2] / ".mathesis-inspect-token"  # written by `serve --inspect`, read by `mathesis inspect`
+
+
+def inspect_token_file() -> Path:
+    return Path(os.environ.get("MATHESIS_INSPECT_TOKEN_FILE") or DEFAULT_INSPECT_TOKEN)
+
+
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config.toml"  # the application directory (source checkout)
 EXAMPLE_CONFIG = Path(__file__).resolve().parent / "config.example.toml"
 
@@ -144,6 +151,7 @@ class Settings:
     providers: dict = field(default_factory=dict)  # [providers.<name>] tables from the config file (not ollama / claude-code)
     configured_providers: tuple = ()       # names of every [providers.<name>] table in the file that sets something
     config_path: Path | None = None        # the config file in use
+    inspect: bool = False                  # `serve --inspect`: pages can be shared with an AI for debugging (never from the config file)
 
     @property
     def summary_enabled(self) -> bool:
@@ -189,6 +197,8 @@ class Settings:
         return sorted(set(self.configured_providers) - {self.summary_provider, self.lab_provider})
 
     def validate(self) -> "Settings":
+        if self.inspect and self.host not in ("127.0.0.1", "localhost", "::1"):
+            raise ConfigError("--inspect shows page contents to whoever holds the token: it only runs on a loopback host (127.0.0.1)")
         if not self.llm:  # nothing will call a provider, so a missing key or a typo in one does not matter
             return self
         for provider in {self.default_provider, self.summary_provider, self.lab_provider} - {None, "none"}:
@@ -251,4 +261,5 @@ class Settings:
             providers=tables,
             configured_providers=tuple(n for n, t in raw.get("providers", {}).items() if t),
             config_path=path,
+            inspect=_flag_text(e("MATHESIS_INSPECT", "")),
         ).validate()

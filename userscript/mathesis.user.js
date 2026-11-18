@@ -313,6 +313,11 @@
     .mx-quick svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .mx-quick .mx-saved { position: absolute; top: 3px; right: 3px; }
     .mx-quick .mx-quick-spin { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-width: 1.5px; }
+    #mathesis-panel #mathesis-ai { flex: none; height: 22px; padding: 0 6px; border: 1px solid #46536a; border-radius: 7px; background: transparent; color: #9aa0a6;
+      cursor: pointer; font: 700 10px/20px system-ui, sans-serif; }
+    #mathesis-panel #mathesis-ai:hover { color: #e8eaed; border-color: #8ab4f8; }
+    #mathesis-panel #mathesis-ai.on { background: #f28b82; border-color: #f28b82; color: #3b0f0c; }
+    #mathesis-panel.folded #mathesis-ai { order: 4; padding: 0 3px; }
     @media (prefers-reduced-motion: reduce) { #mathesis-panel button.mx-quick { transition: none; } }
     #mathesis-panel button.mx { width: 100%; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-align: center; }
     #mathesis-panel button.mx:focus-visible, #mathesis-fold:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
@@ -898,6 +903,7 @@
     serverUp = up;
     files = list;
     panel.classList.toggle('unknown', !up);
+    if (!up) inspector.available(false);
     panel.classList.toggle('saved', files.some((f) => f.state === 'ready'));
     showStatus(!up, again);
     renderRows();
@@ -910,13 +916,13 @@
   function refreshFiles(retry = false) {
     let filePath;
     try { filePath = pagePath(); } catch (e) { // page still loading; retried below
-      if (Date.now() - pageStart > SETTLE_MS) settle(true, []);
+      if (Date.now() - pageStart > SETTLE_MS) { settle(true, []); inspector.probe(); } // a page the script cannot read is the one to inspect
       return;
     }
     lastChecked = filePath;
     return fetch(`${SERVER}/files`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } })
       .then((r) => r.json())
-      .then((d) => { if (lastChecked === filePath) { wasOffline = false; settle(true, d.files || []); } })
+      .then((d) => { if (lastChecked === filePath) { wasOffline = false; settle(true, d.files || []); inspector.available(!!d.inspect); } })
       .catch(() => {
         // The server may just be busy or restarting (or the request was cut by a navigation): show it, then check again
         if (lastChecked !== filePath) return;
@@ -925,6 +931,165 @@
         setTimeout(() => { if (lastChecked === filePath) lastChecked = null; }, 3000); // the 1 s timer below retries
       });
   }
+
+  // ---- Inspect mode (only when the server runs with --inspect): the AI button shares this page, read-only, with `mathesis inspect`.
+  // The page answers questions about itself (outline, html, text, query, count, parse); it cannot run code or click anything, and
+  // password / form values are never sent. Sharing lasts until you click AI again or leave the page.
+  const inspector = (() => {
+    const ai = document.createElement('button');
+    ai.id = 'mathesis-ai';
+    ai.type = 'button';
+    ai.textContent = 'AI';
+    ai.style.display = 'none';
+    head.insertBefore(ai, fold);
+    let sid = null, sharing = false, answered = 0, loopToken = 0;
+    const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+    const clip = (s, n) => (s.length > n ? s.slice(0, n) + `…[+${s.length - n} chars]` : s);
+    const num = (v, d, max) => Math.min(Math.max(parseInt(v, 10) || d, 1), max);
+    const ours = '#mathesis-panel, #mathesis-toast, #mathesis-toasts, #mathesis-tip, .mx-toast';
+    const pick = (selector) => {
+      if (typeof selector !== 'string' || selector.length > 500) throw new Error('selector must be a string of at most 500 characters');
+      return selector;
+    };
+    // a copy of the element that is safe to send: no scripts / styles, no form values, no data: blobs, nothing of this panel
+    function sanitized(el) {
+      const c = el.cloneNode(true);
+      (c.querySelectorAll ? c.querySelectorAll('script, style, noscript, ' + ours) : []).forEach((n) => n.remove());
+      (c.querySelectorAll ? [c, ...c.querySelectorAll('*')] : [c]).forEach((n) => {
+        if (!n.attributes) return;
+        const tag = n.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') { n.removeAttribute('value'); if (tag === 'textarea') n.textContent = ''; }
+        for (const a of [...n.attributes]) if (a.value.length > 300) n.setAttribute(a.name, clip(a.value, 300));
+      });
+      return c;
+    }
+    const label = (el) => {
+      const tag = el.tagName.toLowerCase();
+      const cls = [...el.classList].filter((x) => !/^mx-/.test(x)).slice(0, 3).map((x) => '.' + x).join('');
+      const keep = ['role', 'aria-label', 'data-purpose', 'name', 'type', 'href'].filter((a) => el.hasAttribute(a))
+        .map((a) => `${a}=${JSON.stringify(clip(el.getAttribute(a), 60))}`).join(' ');
+      return tag + (el.id ? '#' + el.id : '') + cls + (keep ? ' [' + keep + ']' : '') + (el.shadowRoot ? ' {shadow}' : '');
+    };
+    const cssPath = (el) => {
+      const parts = [];
+      for (let n = el; n && n.nodeType === 1 && n !== document.documentElement && parts.length < 7; n = n.parentElement) {
+        const same = n.parentElement ? [...n.parentElement.children].filter((x) => x.tagName === n.tagName) : [n];
+        parts.unshift(n.tagName.toLowerCase() + (n.id ? '#' + n.id : same.length > 1 ? `:nth-of-type(${same.indexOf(n) + 1})` : ''));
+        if (n.id) break;
+      }
+      return parts.join(' > ');
+    };
+    const ops = {
+      info: () => ({ url: location.href, title: document.title, readyState: document.readyState, viewport: [innerWidth, innerHeight],
+        iframes: document.querySelectorAll('iframe').length, userAgent: navigator.userAgent, script: scriptInfo() }),
+      outline: (a) => {
+        const root = a.selector ? document.querySelector(pick(a.selector)) : document.body;
+        if (!root) throw new Error('no element matches ' + a.selector);
+        const depth = num(a.depth, 4, 12), lines = [];
+        const walk = (el, d) => {
+          if (lines.length >= 400 || el.matches(ours)) return;
+          const kids = [...el.children];
+          const own = kids.length || /^(script|style|noscript)$/i.test(el.tagName) ? '' : ' ' + JSON.stringify(clip((el.textContent || '').trim().replace(/\s+/g, ' '), 50));
+          lines.push('  '.repeat(d) + label(el) + (d >= depth && kids.length ? ` (+${kids.length} children)` : '') + (own === ' ""' ? '' : own));
+          if (d < depth) kids.forEach((k) => walk(k, d + 1));
+        };
+        walk(root, 0);
+        return lines.join('\n') + (lines.length >= 400 ? '\n…(cut at 400 lines: narrow it with --selector)' : '');
+      },
+      html: (a) => {
+        const els = [...document.querySelectorAll(pick(a.selector || 'html'))].slice(0, 5);
+        if (!els.length) throw new Error('no element matches ' + a.selector);
+        return clip(els.map((el) => sanitized(el).outerHTML).join('\n\n'), num(a.max, 60000, 2000000));
+      },
+      text: (a) => {
+        const els = [...document.querySelectorAll(pick(a.selector || 'body'))].slice(0, 20);
+        if (!els.length) throw new Error('no element matches ' + a.selector);
+        return clip(els.map((el) => (el.innerText || el.textContent || '').trim()).join('\n---\n'), num(a.max, 60000, 2000000));
+      },
+      query: (a) => {
+        const els = [...document.querySelectorAll(pick(a.selector))];
+        return { total: els.length, shown: Math.min(els.length, num(a.limit, 50, 500)),
+          elements: els.slice(0, num(a.limit, 50, 500)).map((el) => ({ path: cssPath(el), tag: el.tagName.toLowerCase(), id: el.id || undefined,
+            class: el.className && typeof el.className === 'string' ? el.className : undefined,
+            attrs: Object.fromEntries([...el.attributes].filter((x) => !['id', 'class', 'value', 'style'].includes(x.name)).slice(0, 12).map((x) => [x.name, clip(x.value, 120)])),
+            text: clip((el.textContent || '').trim().replace(/\s+/g, ' '), 120), children: el.children.length, visible: !!(el.offsetWidth || el.offsetHeight) })) };
+      },
+      count: (a) => ({ selector: a.selector, count: document.querySelectorAll(pick(a.selector)).length }),
+      parse: () => scriptParse(clip),
+    };
+    async function execute(cmd) {
+      const a = cmd.args || {};
+      try {
+        if (!ops[cmd.op]) throw new Error('unknown operation ' + cmd.op);
+        return { ok: true, data: await ops[cmd.op](a) };
+      } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+    }
+    function show() {
+      ai.classList.toggle('on', sharing);
+      ai.title = ai.ariaLabel = sharing ? `Sharing this page with the AI (read-only; ${answered} requests answered). Click to stop.`
+        : 'Share this page with the AI so it can inspect it (read-only: no scripts run, no form values sent)';
+    }
+    async function register() {
+      const r = await fetch(`${SERVER}/inspect/register`, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ url: location.href, title: document.title }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+      sid = (await r.json()).id;
+    }
+    async function loop(token) {
+      while (sharing && token === loopToken) {
+        try {
+          const r = await fetch(`${SERVER}/inspect/poll?id=${encodeURIComponent(sid)}`);
+          if (r.status === 404) { await register(); continue; } // the server restarted and forgot this page
+          const cmd = (await r.json()).command;
+          if (cmd) {
+            const result = await execute(cmd);
+            await fetch(`${SERVER}/inspect/answer?id=${encodeURIComponent(sid)}&command=${encodeURIComponent(cmd.id)}`,
+              { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(result) });
+            answered++; show();
+          }
+        } catch (e) { await nap(2000); }
+      }
+    }
+    async function start() {
+      try { await register(); } catch (e) { toast.error('Could not share the page: ' + e.message); return; }
+      sharing = true; answered = 0; show(); loop(++loopToken);
+      toast.ok('The AI can now inspect this page (read-only: it cannot run code or click; passwords and form values are never sent). Click AI again to stop.');
+    }
+    function stop(quiet) {
+      sharing = false; loopToken++;
+      const id = sid; sid = null;
+      if (id) { try { navigator.sendBeacon(`${SERVER}/inspect/close?id=${encodeURIComponent(id)}`); } catch (e) { /* closed anyway: it goes stale */ } }
+      show();
+      if (!quiet) toast('Stopped sharing this page.');
+    }
+    ai.addEventListener('click', () => (sharing ? stop() : start()));
+    window.addEventListener('pagehide', () => { if (sharing) stop(true); });
+    show();
+    let probed = 0;
+    const probe = () => { // no /files answer without a page path: ask the server directly (at most every 10 s)
+      if (Date.now() - probed < 10000) return;
+      probed = Date.now();
+      fetch(`${SERVER}/inspect`).then((r) => (r.ok ? r.json() : {})).then((d) => { if (d && d.enabled) ai.style.display = ''; }).catch(() => {});
+    };
+    return { probe, available(on) { ai.style.display = on ? '' : 'none'; if (!on && sharing) stop(true); } };
+  })();
+
+  const scriptInfo = () => { // what this script makes of the page (for the AI): kind, path, chips; nothing is changed
+    const o = {};
+    try { o.version = GM_info.script.version; } catch (e) { /* not exposed with @grant none */ }
+    o.kind = isQuiz() ? 'quiz' : isBundle() ? 'bundle' : isLab() ? 'lab' : document.querySelector('ql-youtube-video') ? 'video' : 'other';
+    try { o.path = pagePath(); } catch (e) { o.pathError = String((e && e.message) || e); }
+    try { o.chips = rowSpecs().map((s) => s.chip); } catch (e) { o.chipsError = String((e && e.message) || e); }
+    return o;
+  };
+  const scriptParse = (clip) => { // the text the save button would send, or why it fails (reading only: nothing is clicked)
+    const out = scriptInfo();
+    try {
+      const t = getTranscript();
+      out.result = t === RAW ? 'RAW: nothing recognisable, so the whole page HTML would be saved' : { chars: String(t).length, text: clip(String(t), 4000) };
+    } catch (e) { out.error = String((e && e.stack) || e); }
+    return out;
+  };
 
   const pageReady = () => {
     if (Date.now() - pageStart > SETTLE_MS) return true;

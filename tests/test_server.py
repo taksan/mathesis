@@ -248,7 +248,7 @@ def test_files_lists_quiz_attempts_newest_first_json_and_all_questions(client):
     assert r[0]["path"] == "Udemy/C/02-incorrect (attempt 10).md" and r[0]["opener"] == "obsidian"
     assert r[0]["obsidian_uri"] == uri_for(client.root / "Udemy/C/02-incorrect (attempt 10).md")
     assert r[-1]["opener"] == "editor" and "obsidian_uri" not in r[-1]
-    assert client.get("/files", headers={"X-File-Path": "Udemy/C/05-incorrect.md"}).json() == {"files": []}
+    assert client.get("/files", headers={"X-File-Path": "Udemy/C/05-incorrect.md"}).json()["files"] == []
 
 
 def test_files_lists_a_lesson_with_summary_and_guide(client):
@@ -258,7 +258,7 @@ def test_files_lists_a_lesson_with_summary_and_guide(client):
     _put(client, "G/C/01-Lab-summary.md")
     _put(client, "G/C/01-Lab-lab-guide.md")
     assert [f["kind"] for f in client.get("/files", headers=h).json()["files"]] == ["lab-guide", "summary", "transcript"]
-    assert client.get("/files", headers={"X-File-Path": "G/C/09-None.md"}).json() == {"files": []}
+    assert client.get("/files", headers={"X-File-Path": "G/C/09-None.md"}).json()["files"] == []
 
 
 def test_files_shows_pending_and_failed_jobs(client):

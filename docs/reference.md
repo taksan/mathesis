@@ -164,3 +164,15 @@ Every summary ends with a hidden comment naming the model, pipeline and revision
 ```bash
 .venv/bin/pytest
 ```
+
+
+## Inspect mode
+
+For debugging why a userscript does not read a page: `mathesis serve --inspect` (never on by default; not a config-file option; only on 127.0.0.1).
+
+1. The panel shows an **AI** button. Clicking it on a page shares *that page visit* with the server: the button turns red, a toast says so, and clicking again (or leaving the page) stops it. Nothing is shared otherwise.
+2. An AI (or you) asks the page questions with `mathesis inspect ACTION [--page N] [--selector CSS] [--max N] [--limit N] [--depth N]`:
+   `pages` (what is shared), `info` (URL, title, what the script makes of the page: kind, path, or why it fails), `outline` (the element tree), `html` and `text` (of a selector), `query` (elements with attributes, text and a CSS path), `count`, `parse` (what the save button would send, or the error; on Udemy only counts, because reading a transcript opens its panel).
+3. The page only answers these read-only questions. There is **no way to run JavaScript, click or type**; `script`/`style` contents, `value`s of form fields and the panel itself are never sent, long attributes are cut. Page text can still hold things you see on screen (a lab's temporary account, your name): share only pages you are willing to show.
+
+How it works: the page registers with the server (`POST /inspect/register`) and long-polls it (`GET /inspect/poll`, 20 s) for commands, answering with `POST /inspect/answer`. It is long polling, not a WebSocket, so it uses the same `fetch` to `127.0.0.1` the userscripts already use and needs no extra dependency or page-policy exception. The control side (`GET /inspect/pages`, `POST /inspect/call`) needs the token in `.mathesis-inspect-token` (new on every start, mode 600, gitignored; `MATHESIS_INSPECT_TOKEN_FILE` moves it) sent as `X-Mathesis-Inspect-Token`, and refuses any request with an `Origin` header, so a web page cannot read what another page shares. The page side accepts only the sites of the userscripts. A page that does not poll for 90 s is dropped; without `--inspect` all of these paths are 404.

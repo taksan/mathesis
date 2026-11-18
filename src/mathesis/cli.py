@@ -39,6 +39,8 @@ def _settings(args) -> Settings:
         overrides["obsidian_open"] = False
     if getattr(args, "no_notify", False):
         overrides["notify"] = False
+    if getattr(args, "inspect", False):
+        overrides["inspect"] = True
     return dataclasses.replace(s, **overrides)
 
 
@@ -53,6 +55,7 @@ def cmd_serve(args) -> int:
     os.environ.update({
         "MATHESIS_VERSION_SHOWN": shown, "MATHESIS_HOST": s.host, "MATHESIS_PORT": str(s.port), "MATHESIS_ROOT": str(s.root),
         "MATHESIS_MODEL": s.model, "MATHESIS_OLLAMA_URL": s.ollama_url, "MATHESIS_NUM_CTX": str(s.num_ctx),
+        "MATHESIS_INSPECT": "1" if s.inspect else "0",
         "MATHESIS_LLM": "1" if s.llm else "0", "MATHESIS_SUMMARIZE": "1" if s.summarize else "0", "MATHESIS_NOTIFY": "1" if s.notify else "0",
         "MATHESIS_LAB_GUIDE": "1" if s.lab_guide else "0", "MATHESIS_NOTIFY_ON_SAVE": "1" if s.notify_on_save else "0", "MATHESIS_PIPELINE": s.pipeline,
         "MATHESIS_MAX_REVISIONS": str(s.max_revisions), "MATHESIS_OBSIDIAN_OPEN": "1" if s.obsidian_open else "0",
@@ -62,6 +65,60 @@ def cmd_serve(args) -> int:
     package_dir = str(Path(__file__).resolve().parent)
     uvicorn.run("mathesis.server:app", host=s.host, port=s.port, reload=not args.no_reload,
                 reload_dirs=[package_dir])
+    return 0
+
+
+# ---------------------------------------------------------------- inspect
+def cmd_inspect(args) -> int:
+    """Ask a page shared with the AI button (server running with --inspect) about itself. Prints the answer."""
+    import json
+    import urllib.error
+    import urllib.request
+    from .config import inspect_token_file
+    from .pageinspect import OPS
+    s = _settings(args)
+    token_file = inspect_token_file()
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        print(f"no token at {token_file}: start the server with `mathesis serve --inspect`", file=sys.stderr)
+        return 1
+    base = f"http://{s.host}:{s.port}/inspect"
+
+    def ask(url, payload=None):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode() if payload is not None else None,
+                                     headers={"X-Mathesis-Inspect-Token": token, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            try:
+                message = json.load(e).get("error", e.reason)
+            except ValueError:
+                message = e.reason
+            print(f"error: {message}", file=sys.stderr)
+        except OSError as e:
+            print(f"cannot reach the server at {base}: {e}", file=sys.stderr)
+        return None
+
+    if args.action == "pages":
+        got = ask(base + "/pages")
+        if got is None:
+            return 1
+        for p in got["pages"]:
+            print(f"page {p['page']}: {p['title']!r} {p['url']} (shared {p['shared_for']} s, seen {p['last_seen']} s ago)")
+        if not got["pages"]:
+            print("no page is shared: click the AI button in the Mathesis panel of the page")
+        return 0
+    call_args = {k: v for k, v in {"selector": args.selector, "max": args.max, "limit": args.limit, "depth": args.depth}.items() if v is not None}
+    got = ask(base + "/call", {"op": args.action, "args": call_args, "page": args.page})
+    if got is None:
+        return 1
+    if not got.get("ok"):
+        print(f"the page could not do that: {got.get('error')}", file=sys.stderr)
+        return 1
+    data = got.get("data")
+    print(data if isinstance(data, str) else json.dumps(data, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -239,10 +296,22 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--no-llm", dest="no_llm", action="store_true", help="no LLM feature at all (no summaries, no lab guides): files are only saved")
     sv.add_argument("--no-summary", action="store_true", help="only save transcripts, no summaries")
     sv.add_argument("--no-lab-guide", dest="no_lab_guide", action="store_true", help="labs: no gcloud/terraform guide")
+    sv.add_argument("--inspect", action="store_true", help="debug mode: an AI button in the panel lets you share a page, read-only, with `mathesis inspect`")
     sv.add_argument("--no-notify", action="store_true", help="no desktop notifications")
     sv.add_argument("--no-open", dest="no_open", action="store_true", help="notification click does not open the note")
     sv.add_argument("--single", action="store_true", help="one-call pipeline with the original prompt")
     sv.set_defaults(func=cmd_serve)
+
+    from .pageinspect import OPS as INSPECT_OPS
+    ins = sub.add_parser("inspect", help="look at a page shared with the AI button (server started with --inspect)")
+    ins.add_argument("--host"), ins.add_argument("--port", type=int), ins.add_argument("--config", help="config file (the server address comes from it)")
+    ins.add_argument("action", choices=["pages", *INSPECT_OPS], help="pages: what is shared; info, outline, html, text, query, count, parse: ask a page")
+    ins.add_argument("--page", type=int, help="page number from `pages` (default: the newest)")
+    ins.add_argument("--selector", help="CSS selector (html, text, query, count: comma separated list allowed)")
+    ins.add_argument("--max", type=int, help="most characters of html / text (default 60000)")
+    ins.add_argument("--limit", type=int, help="most elements for query (default 50)")
+    ins.add_argument("--depth", type=int, help="outline depth (default 4)")
+    ins.set_defaults(func=cmd_inspect)
 
     su = sub.add_parser("summarize", help="write <file>-summary.md for transcript files (or every .md in a folder)")
     common(su)

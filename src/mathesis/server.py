@@ -45,6 +45,7 @@ from .llm import make_client
 from .obsidian import editor_command, find_command, have_obsidian, open_folder, open_in_editor, uri_for
 from .reports import ReportStore
 from .pipeline import summary_path, write_summary
+from . import pageinspect as inspect_mode
 from .files import Jobs, page_files
 from .lessons import is_derived
 from .userscripts import list_scripts, render_page
@@ -53,6 +54,97 @@ from .userscripts import list_scripts, render_page
 class ApiError(Exception):
     def __init__(self, status: int, message: str, code: str | None = None):
         self.status, self.message, self.code = status, message, code
+
+
+PAGE_ORIGINS = re.compile(r"^https://([a-z0-9-]+\.)*(udemy\.com|skills\.google|cloudskillsboost\.google)$")   # the sites the userscripts run on
+
+
+def _inspect_routes(app: FastAPI, settings: Settings) -> None:
+    """Inspect mode (`serve --inspect`): see pageinspect.py. Only registered when the mode is on, so otherwise these paths are 404."""
+    import hmac
+    import secrets as _secrets
+    from .config import inspect_token_file
+
+    TOKEN_FILE = inspect_token_file()
+    hub = inspect_mode.Hub()
+    token = _secrets.token_urlsafe(32)
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_FILE.touch(mode=0o600)
+    TOKEN_FILE.chmod(0o600)
+    TOKEN_FILE.write_text(token, encoding="utf-8")
+    app.state.hub, app.state.inspect_token, app.state.inspect_token_file = hub, token, TOKEN_FILE
+
+    def from_page(request: Request) -> None:
+        """The page side: only the sites of the userscripts (a browser always sends the Origin of the page)."""
+        origin = request.headers.get("origin")
+        if origin is not None and not PAGE_ORIGINS.match(origin):
+            raise ApiError(403, "not a page Mathesis serves")
+
+    def from_control(request: Request, x_mathesis_inspect_token: str | None) -> None:
+        """The control side: the token, and never from a web page (a page could otherwise read what other pages share)."""
+        if request.headers.get("origin") is not None:
+            raise ApiError(403, "the inspect API is not for web pages")
+        if not x_mathesis_inspect_token or not hmac.compare_digest(x_mathesis_inspect_token, token):
+            raise ApiError(401, f"missing or wrong token (the file {TOKEN_FILE} holds it)")
+
+    def guarded(fn):
+        try:
+            return fn()
+        except inspect_mode.InspectError as e:
+            raise ApiError(e.status, e.message)
+
+    @app.get("/inspect")
+    def inspect_enabled(request: Request):
+        from_page(request)
+        return {"enabled": True}
+
+    @app.post("/inspect/register")
+    async def inspect_register(request: Request):
+        from_page(request)
+        data = json.loads((await request.body() or b"{}") or b"{}")
+        page = guarded(lambda: hub.register(data.get("url", ""), data.get("title", "")))
+        print(f"inspect: page {page.number} shared: {page.url}")
+        return {"id": page.secret, "page": page.number}
+
+    @app.get("/inspect/poll")
+    def inspect_poll(request: Request, id: str):
+        from_page(request)
+        return {"command": guarded(lambda: hub.poll(id))}
+
+    @app.post("/inspect/answer")
+    async def inspect_answer(request: Request, id: str, command: str):
+        from_page(request)
+        body = await request.body()
+        if len(body) > inspect_mode.MAX_RESULT:
+            raise ApiError(413, "answer too large")
+        try:
+            result = json.loads(body or b"{}")
+        except ValueError:
+            raise ApiError(400, "answer is not JSON")
+        guarded(lambda: hub.answer(id, command, result))
+        return {"status": "ok"}
+
+    @app.post("/inspect/close")
+    def inspect_close(request: Request, id: str):
+        from_page(request)
+        hub.close(id)
+        return {"status": "ok"}
+
+    @app.get("/inspect/pages")
+    def inspect_pages(request: Request, x_mathesis_inspect_token: str | None = Header(None)):
+        from_control(request, x_mathesis_inspect_token)
+        return {"pages": hub.listing()}
+
+    @app.post("/inspect/call")
+    async def inspect_call(request: Request, x_mathesis_inspect_token: str | None = Header(None)):
+        """Body {"op", "args", "page"}: the page does the operation and its answer is returned."""
+        from_control(request, x_mathesis_inspect_token)
+        try:
+            data = json.loads((await request.body()) or b"{}")
+        except ValueError:
+            raise ApiError(400, "the body must be JSON")
+        args = data.get("args") if isinstance(data.get("args"), dict) else {}
+        return await run_in_threadpool(lambda: guarded(lambda: hub.call(data.get("page"), str(data.get("op", "")), args)))
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -65,6 +157,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if version != os.environ.get("MATHESIS_VERSION_SHOWN"):  # `uvicorn mathesis.server:app` directly, or a code reload
             print(version, flush=True)
         print(f"Mathesis listening on http://{settings.host}:{settings.port}  (writing under {settings.root})")
+        if settings.inspect:
+            print(f"INSPECT MODE: the AI button appears in the panel; a page you share can be read (read-only) with `mathesis inspect`. "
+                  f"Token: {app.state.inspect_token_file}")
         if settings.config_path:
             print(f"config: {settings.config_path}")
         if find_command(settings.obsidian_command):
@@ -118,6 +213,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return target
 
     reports = ReportStore(settings.report_dir)
+    if settings.inspect:
+        _inspect_routes(app, settings)
     jobs = Jobs()
     app.state.jobs = jobs
 
@@ -197,7 +294,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/files")
     def files(x_file_path: str | None = Header(None)):
         """Every document of the page whose main file is X-File-Path (see files.page_files)."""
-        return {"files": listing(target_path(x_file_path))}
+        return {"files": listing(target_path(x_file_path)), "inspect": settings.inspect}   # inspect: the panel shows its AI button
 
     def listed_file(raw_path: str | None) -> Path:
         """The path of a file that GET /files lists for some page; anything else is refused."""
