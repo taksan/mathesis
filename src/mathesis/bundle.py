@@ -276,6 +276,13 @@ def _rise_item(item: dict, out: list[str], heading: str, in_list: str | None, nu
             elif in_list == "bulleted":
                 text = f"- {text}"
             out.append(text)
+    options = []  # knowledge check: the options, the right ones marked (as in the Adapt quizzes), one list
+    for answer in item.get("answers") or []:
+        text = one_line(answer.get("title")) if isinstance(answer, dict) else ""
+        if text:
+            options.append(f"- {'✅' if answer.get('correct') else '⬜'} {text}")
+    if options:
+        out.append("\n".join(options))
     for side in ("front", "back"):  # flash cards and stacks (a front that is only an image has just an alt text)
         card = item.get(side)
         if isinstance(card, dict) and card.get("type") not in ("fullimage",):
