@@ -103,10 +103,26 @@
     return { title: name, prefix, base: `${prefix}${normalizeName(name)}` };
   }
 
+  // The course's instructor(s). Udemy's course-taking pages carry them as JSON in the app's data-module-args (every page, not only
+  // the overview tab); the instructor block of the overview tab is the fallback. '' when the page has neither.
+  function courseAuthor() {
+    try {
+      for (const el of document.querySelectorAll('[data-module-args]')) {
+        const raw = el.getAttribute('data-module-args');
+        if (!raw.includes('instructors_info')) continue;
+        const list = (JSON.parse(raw).instructorInfo || {}).instructors_info || [];
+        const names = list.map((i) => String(i.display_name || i.title || '').trim()).filter(Boolean);
+        if (names.length) return names.join(', ');
+      }
+    } catch (e) { /* not JSON: try the page */ }
+    const link = document.querySelector('[data-purpose="instructor-bio"] a[href*="/user/"]');
+    return link ? link.textContent.trim() : '';
+  }
+
   // Goes to the server for the frontmatter of the Markdown file (the server adds the file type and the hash itself).
   function metaHeader() {
     let meta = { url: location.href };
-    try { meta = { course: courseName(), lesson: lessonFileName().title, url: location.href }; } catch (e) { /* page still loading */ }
+    try { meta = { course: courseName(), author: courseAuthor(), lesson: lessonFileName().title, url: location.href }; } catch (e) { /* page still loading */ }
     return encodeURIComponent(JSON.stringify(meta));
   }
 
@@ -415,6 +431,7 @@
     const limit = examTimeLimit();
     return JSON.stringify({
       title: lessonFileName().title,
+      author: courseAuthor(),
       attempt: attemptLabel(),
       source: location.href,
       timeLimitMinutes: limit ? limit.minutes : null,

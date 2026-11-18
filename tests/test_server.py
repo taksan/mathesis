@@ -338,13 +338,14 @@ def meta_header(**values):
 
 def test_markdown_files_get_frontmatter_with_a_hash_of_the_body(client):
     h = {"X-File-Path": "Udemy/Curso/02-incorrect.md", "X-Mathesis-Kind": "quiz-review",
-         "X-Mathesis-Meta": meta_header(course="Curso Ç", lesson="Prática 1", url="https://example.com/q/1")}
+         "X-Mathesis-Meta": meta_header(course="Curso Ç", author="Priya D | Acme", lesson="Prática 1", url="https://example.com/q/1")}
     assert client.post("/write", content="# Incorrect\n\nq1\n".encode(), headers=h).json()["kept"] is False
     text = (client.root / "Udemy/Curso/02-incorrect.md").read_text()
     front, rest = frontmatter.split(text)
     assert rest == "# Incorrect\n\nq1\n"
     assert front[0] == 'type: "to-review"' and 'course: "Curso Ç"' in front and 'lesson: "Prática 1"' in front
-    assert 'url: "https://example.com/q/1"' in front
+    assert 'url: "https://example.com/q/1"' in front and 'author: "Priya D | Acme"' in front
+    assert front.index('course: "Curso Ç"') < front.index('author: "Priya D | Acme"') < front.index('lesson: "Prática 1"')
     assert front[-1] == 'hash: "' + frontmatter.body_hash(rest) + '"'
 
 
@@ -353,7 +354,7 @@ def test_kinds_map_to_file_types_and_fall_back_to_the_path(client):
         client.post("/write", content=b"text", headers={"X-File-Path": f"G/Course X/05-{kind}.md", "X-Mathesis-Kind": kind})
         front, _ = frontmatter.split((client.root / f"G/Course X/05-{kind}.md").read_text())
         assert f'type: "{expected}"' in front and 'course: "Course X"' in front
-        assert not any(l.startswith(("lesson:", "url:")) for l in front)      # nothing invented from the file name
+        assert not any(l.startswith(("lesson:", "url:", "author:")) for l in front)      # nothing invented from the file name
     client.post("/write", content=b"x", headers={"X-File-Path": "G/C/06-a.md", "X-Mathesis-Meta": "not json"})
     assert frontmatter.split((client.root / "G/C/06-a.md").read_text())[0] is not None
 

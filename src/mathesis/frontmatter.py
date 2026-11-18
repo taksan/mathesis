@@ -1,4 +1,4 @@
-"""YAML frontmatter at the top of the Markdown files the server saves: file type, course, lesson, url and a hash of the body.
+"""YAML frontmatter at the top of the Markdown files the server saves: file type, course, author, lesson, url and a hash of the body.
 
 The hash is of the text after the frontmatter, so editing only the metadata never changes it, and a note typed into the body
 does. Anything in the frontmatter that Mathesis does not own (keys the person added) is kept as it is.
@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 
-OWNED = ("type", "course", "lesson", "url", "hash")
+OWNED = ("type", "course", "author", "lesson", "url", "hash")
 
 
 def split(text: str) -> tuple[list[str] | None, str]:

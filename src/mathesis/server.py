@@ -1,8 +1,8 @@
 """HTTP API used by the userscript.
 
 POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body: the content (UTF-8)
-              Header X-Mathesis-Meta: percent-encoded JSON {"course", "lesson", "url"} for the frontmatter (type and hash are the server's)
-              Markdown files get YAML frontmatter (type, course, lesson, url, hash of the body). A file that already exists without
+              Header X-Mathesis-Meta: percent-encoded JSON {"course", "author", "lesson", "url"} for the frontmatter (type and hash are the server's)
+              Markdown files get YAML frontmatter (type, course, author, lesson, url, hash of the body). A file that already exists without
               frontmatter is not overwritten: the frontmatter is added and the rest is left as it is ("kept": true in the answer).
               A file whose body no longer matches the hash in its frontmatter (the person added notes) is not overwritten either:
               409 {"error", "code": "modified"} unless the request has X-Mathesis-Overwrite: yes (replace it) or metadata (keep the
@@ -347,12 +347,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if raw:
             try:
                 data = json.loads(unquote(raw))
-                sent = {k: " ".join(str(data[k]).split())[:500] for k in ("course", "lesson", "url") if isinstance(data, dict) and data.get(k)}
+                sent = {k: " ".join(str(data[k]).split())[:500] for k in ("course", "author", "lesson", "url") if isinstance(data, dict) and data.get(k)}
             except ValueError:
                 pass  # not JSON: the file is still saved, with what the server can work out
         # no lesson name is invented: a file name such as "01-incorrect" is not the lesson. Missing keys can be filled in by a later save.
         return {"type": FILE_TYPES[kind], "course": sent.get("course") or target.parent.name,
-                "lesson": sent.get("lesson", ""), "url": sent.get("url", "")}
+                "author": sent.get("author", ""), "lesson": sent.get("lesson", ""), "url": sent.get("url", "")}
 
     def lab_page(target: Path) -> bool:
         """A lab: its frontmatter says type: lab (or a guide was already written for it)."""

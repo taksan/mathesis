@@ -19,6 +19,10 @@
       "minLength": 1,
       "description": "Quiz title, as in the course curriculum."
     },
+    "author": {
+      "type": "string",
+      "description": "The course's instructor(s) as Udemy shows them, comma-separated; empty when the page does not say. Absent in files saved before it was recorded."
+    },
     "attempt": {
       "type": "string",
       "description": "\"Attempt 2\", or empty when the page does not show it."

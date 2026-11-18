@@ -104,3 +104,12 @@ def test_time_limit_is_minutes_or_null_with_its_source_text():
     per_option = load(ROOT / "tests" / "fixtures" / "quiz-option-explanations.json")
     assert overall["timeLimitMinutes"] == 120 and "2 hours" in overall["timeLimitText"]
     assert per_option["timeLimitMinutes"] is None and per_option["timeLimitText"] == ""
+
+
+def test_author_is_optional_but_must_be_text(sample):
+    sample.pop("author", None)
+    assert errors(sample) == []
+    sample["author"] = "Priya Dwivedi | CertShield Academy"
+    assert errors(sample) == []
+    sample["author"] = ["Priya"]
+    assert errors(sample)
