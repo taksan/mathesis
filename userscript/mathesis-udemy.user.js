@@ -606,7 +606,7 @@
   head.title = 'Drag to move · double-click to reset';
   head.style.cssText += 'cursor:grab;user-select:none;touch-action:none;';
   head.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.target.closest('#mathesis-fold, .mx-quick')) return;
+    if (e.button !== 0 || e.target.closest('#mathesis-fold, .mx-quick, #mathesis-ai')) return;
     const r = panel.getBoundingClientRect();
     drag = { x: e.clientX, y: e.clientY, top: r.top, right: viewW() - r.right, onMark: !!e.target.closest('#mathesis-mark') };
     moved = false;
@@ -634,7 +634,7 @@
   head.addEventListener('pointerup', endDrag);
   head.addEventListener('pointercancel', endDrag);
   head.addEventListener('dblclick', (e) => {
-    if (e.target.closest('#mathesis-fold, .mx-quick')) return;
+    if (e.target.closest('#mathesis-fold, .mx-quick, #mathesis-ai')) return;
     panel.style.top = panel.style.right = '';
     try { localStorage.removeItem(POS_KEY); } catch (err) { /* nothing stored */ }
   });
