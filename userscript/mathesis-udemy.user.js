@@ -492,6 +492,8 @@
     #mathesis-panel button.mx-quick:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
     .mx-quick svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .mx-quick .mx-saved { position: absolute; top: 3px; right: 3px; }
+    .mx-quick .mx-warn { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; pointer-events: none; }
+    .mx-quick .mx-warn svg { width: 14px; height: 14px; }
     .mx-quick .mx-quick-spin { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-width: 1.5px; }
     #mathesis-panel #mathesis-ai { flex: none; height: 22px; padding: 0 6px; border: 1px solid #46536a; border-radius: 7px; background: transparent; color: #9aa0a6;
       cursor: pointer; font: 700 10px/20px system-ui, sans-serif; }
@@ -758,18 +760,37 @@
   quick.addEventListener('click', () => { const f = quickFile(); if (f) openFile(f); else if (quickSpec) (quickSpec.quick || quickSpec.save)(); });
   tipOn(quick, () => {
     if (!quickSpec) return '';
+    const warned = unrecognised ? '⚠ ' + WARN_NOTE + ' ' : '';
     const f = quickFile();
-    if (f) return `Open · ${displayName(f)} in ${via(f)}. Unfold the panel (μ) to save again or for the other files.`;
-    if (nothingToReview()) return serverUp ? 'Save · all questions. Nothing to review in this attempt (no wrong or marked questions), so this saves the whole test as Markdown and JSON.'
-      : 'Copy · all questions. Nothing to review in this attempt, so this copies the whole test. The server is offline: an offline copy is kept in this browser.';
-    return `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}`;
+    if (f) return warned + `Open · ${displayName(f)} in ${via(f)}. Unfold the panel (μ) to save again or for the other files.`;
+    if (nothingToReview()) return warned + (serverUp ? 'Save · all questions. Nothing to review in this attempt (no wrong or marked questions), so this saves the whole test as Markdown and JSON.'
+      : 'Copy · all questions. Nothing to review in this attempt, so this copies the whole test. The server is offline: an offline copy is kept in this browser.');
+    return warned + `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}`;
   });
+  // The page type is decided when the page has settled (the panel is no longer "loading"): a page the script does not recognise
+  // (see pageRecognised) gets a warning badge on this button, since what a click would save is a guess.
+  const WARN_NOTE = 'Page type not recognised: Mathesis does not know what to save from this page.';
+  const ICON_WARN = '<svg viewBox="0 0 16 16"><path d="M8 1.6 15.3 14.2H.7z" fill="#f9ab00" stroke="#f9ab00" stroke-width="1.2"/><path d="M8 6v4M8 11.8v.1" stroke="#14202f" stroke-width="1.8"/></svg>';
+  let unrecognised = false;
+  // Known: a lecture (its transcript) and a quiz result (its questions). Not known: a quiz you are taking, an assignment, a result
+  // page whose questions never showed up, or a page whose lesson the sidebar does not name.
+  const pageRecognised = () => {
+    try { computePathToWrite(); } catch (e) { return false; }
+    if (/\/result\//.test(location.pathname)) return isQuizReview();
+    return /\/learn\/lecture\//.test(location.pathname);
+  };
   function updateQuick(specs) {
     quickSpec = specs[0] || null;
     quick.style.display = quickSpec ? '' : 'none';
     quick.textContent = '';
     if (!quickSpec) return;
     quick.insertAdjacentHTML('beforeend', quickFile() ? ICONS.open : serverUp ? ICON_SAVE : ICONS.copy);
+    if (unrecognised) {
+      const warn = document.createElement('span');
+      warn.className = 'mx-warn';
+      warn.innerHTML = ICON_WARN;
+      quick.append(warn);
+    }
     if (serverUp && files.some((f) => f.state === 'pending')) { // a summary / lab guide is being written: a spinner instead of the dot
       const spin = document.createElement('span');
       spin.className = 'mx-spin mx-quick-spin';
@@ -779,7 +800,7 @@
       dot.className = 'mx-saved';
       quick.append(dot);
     }
-    quick.setAttribute('aria-label', quickFile() ? `Open ${displayName(quickFile())}` : `${serverUp ? 'Save' : 'Copy'} ${nothingToReview() ? 'all questions' : quickSpec.chip}`);
+    quick.setAttribute('aria-label', (unrecognised ? 'Warning: ' + WARN_NOTE + ' ' : '') + (quickFile() ? `Open ${displayName(quickFile())}` : `${serverUp ? 'Save' : 'Copy'} ${nothingToReview() ? 'all questions' : quickSpec.chip}`));
   }
 
   const displayName = (f) => ({
@@ -1033,7 +1054,8 @@
     let pk = null;
     try { pk = pageKey(); } catch (e) { /* page still loading */ }
     const offline = pk ? offlineFor(pk) : [];
-    const key = JSON.stringify([serverUp, files, specs.map((s) => s.chip), offline.map((e) => [e.path, e.savedAt])]);
+    unrecognised = !panel.classList.contains('loading') && !pageRecognised();
+    const key = JSON.stringify([serverUp, files, specs.map((s) => s.chip), offline.map((e) => [e.path, e.savedAt]), unrecognised]);
     if (key === renderKey) return;
     renderKey = key;
     hideTip();
@@ -1083,7 +1105,7 @@
   // Server offline: the only status text there is, with a retry link just after it.
   function showStatus(offline, again) {
     statusEl.textContent = '';
-    if (!offline) return;
+    if (!offline) { if (!pageRecognised()) statusEl.textContent = '⚠ ' + WARN_NOTE; return; }
     statusEl.append(document.createTextNode(again ? 'Server still offline ' : 'Server offline '));
     const retry = document.createElement('button');
     retry.type = 'button';
