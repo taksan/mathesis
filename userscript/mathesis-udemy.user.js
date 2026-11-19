@@ -385,8 +385,8 @@
     return questions;
   }
 
-  async function getAllQuestions() {
-    const questions = await collectAllQuestions();
+  async function getAllQuestions(preloaded) {
+    const questions = preloaded || await collectAllQuestions();
     if (!questions) return null;
     const attempt = attemptLabel();
     return [`# ${lessonFileName().title}`, '', `*${[attempt, `${questions.length} questions`].filter(Boolean).join(' · ')}*`, '',
@@ -425,8 +425,8 @@
     return null;
   }
 
-  async function getQuizJson() {
-    const questions = await collectAllQuestions();
+  async function getQuizJson(preloaded) {
+    const questions = preloaded || await collectAllQuestions();
     if (!questions) return null;
     const limit = examTimeLimit();
     return JSON.stringify({
@@ -672,10 +672,11 @@
   // The save chips of this page. Order: to review, all, json.
   const rowSpecs = () => (isQuizReview() ? [
     { chip: 'to review', kinds: ['incorrect'], save: () => copyLesson(false),
+      quick: () => (hasReview() ? copyLesson(false) : saveAll()), // the folded button: with nothing to review it saves everything instead
       tipOn: 'Saves the questions you got wrong or marked, with explanations, as NN-incorrect.md (the attempt is in the name for attempts after the first). Saving again replaces this attempt.',
       tipOff: 'Copies the questions you got wrong or marked, with explanations, to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
-    { chip: 'all', kinds: ['all'], save: () => copyLesson(true),
-      tipOn: 'Saves every question with its explanations as NN-all questions.md, a clean copy of the whole test. Overwrites the previous file.',
+    { chip: 'all', kinds: ['all'], save: saveAll,
+      tipOn: 'Saves every question with its explanations as NN-all questions.md (a clean copy of the whole test) and as NN-all questions.json (for other tools). Overwrites the previous files.',
       tipOff: 'Copies every question with its explanations to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
     { chip: 'json', kinds: ['json'], save: saveJson,
       tipOn: 'Saves every question as a JSON file (options, correct answers, explanations) for other tools. Overwrites the previous file.',
@@ -750,12 +751,17 @@
   // Folded: one button does the main action of the page (the first chip: the transcript, or the quiz to review).
   let quickSpec = null;
   // the file this button's action already made: then the button opens it (to save again, or for the other files, unfold the panel)
-  const quickFile = () => (quickSpec && serverUp ? files.find((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready') : null);
-  quick.addEventListener('click', () => { const f = quickFile(); if (f) openFile(f); else if (quickSpec) quickSpec.save(); });
+  // On a quiz with nothing to review (no wrong or marked questions) the button saves, and then opens, the "all questions" file instead.
+  const nothingToReview = () => !!quickSpec && quickSpec.chip === 'to review' && !hasReview();
+  const quickKinds = () => (nothingToReview() ? ['all'] : quickSpec.kinds);
+  const quickFile = () => (quickSpec && serverUp ? files.find((f) => quickKinds().includes(f.kind) && f.state === 'ready') : null);
+  quick.addEventListener('click', () => { const f = quickFile(); if (f) openFile(f); else if (quickSpec) (quickSpec.quick || quickSpec.save)(); });
   tipOn(quick, () => {
     if (!quickSpec) return '';
     const f = quickFile();
     if (f) return `Open · ${displayName(f)} in ${via(f)}. Unfold the panel (μ) to save again or for the other files.`;
+    if (nothingToReview()) return serverUp ? 'Save · all questions. Nothing to review in this attempt (no wrong or marked questions), so this saves the whole test as Markdown and JSON.'
+      : 'Copy · all questions. Nothing to review in this attempt, so this copies the whole test. The server is offline: an offline copy is kept in this browser.';
     return `${serverUp ? 'Save' : 'Copy'} · ${quickSpec.chip}. ${serverUp ? quickSpec.tipOn : quickSpec.tipOff}`;
   });
   function updateQuick(specs) {
@@ -768,12 +774,12 @@
       const spin = document.createElement('span');
       spin.className = 'mx-spin mx-quick-spin';
       quick.append(spin);
-    } else if (serverUp && files.some((f) => quickSpec.kinds.includes(f.kind) && f.state === 'ready')) { // a small green dot: that file exists
+    } else if (serverUp && files.some((f) => quickKinds().includes(f.kind) && f.state === 'ready')) { // a small green dot: that file exists
       const dot = document.createElement('span');
       dot.className = 'mx-saved';
       quick.append(dot);
     }
-    quick.setAttribute('aria-label', quickFile() ? `Open ${displayName(quickFile())}` : `${serverUp ? 'Save' : 'Copy'} ${quickSpec.chip}`);
+    quick.setAttribute('aria-label', quickFile() ? `Open ${displayName(quickFile())}` : `${serverUp ? 'Save' : 'Copy'} ${nothingToReview() ? 'all questions' : quickSpec.chip}`);
   }
 
   const displayName = (f) => ({
@@ -1318,23 +1324,24 @@
       .catch(() => null);
   }
 
-  async function copyLesson(allQuestions = false) {
+  // Resolves to true when the text reached the server and was saved. `preloaded`: the questions, when the caller already read them.
+  async function copyLesson(allQuestions = false, preloaded = null) {
     let kind = isQuizReview() ? (allQuestions ? 'quiz-all' : 'quiz-review') : 'transcript';
-    let text = allQuestions ? await getAllQuestions() : await getTranscript();
+    let text = allQuestions ? await getAllQuestions(preloaded) : await getTranscript();
     let filePath;
     if (text === RAW) {
       kind = 'raw';
       text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
       filePath = rawPathToWrite();
     } else if (!text) {
-      return;
+      return false;
     } else {
       try {
         filePath = computePathToWrite(allQuestions);
       } catch (e) {
         console.error(e);
         toast.error('Could not compute file path: ' + e.message);
-        return;
+        return false;
       }
     }
 
@@ -1344,14 +1351,14 @@
         .then(() => toast.ok(why + 'Copied to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
         .catch((error) => toast.error('Could not copy text to clipboard: ' + error));
     };
-    if (!serverUp) { copyOnly(''); return; } // no server: nothing is sent
+    if (!serverUp) { copyOnly(''); return false; } // no server: nothing is sent
 
     if (kind === 'quiz-review' && !attemptNumber()) { // the file is named after the attempt: never guess it
       toast.error('Could not find the attempt number ("Attempt N") on this page, so the review was not saved. Try again once the results have loaded.');
-      return;
+      return false;
     }
 
-    if (files.some((f) => f.state === 'pending')) { toast('Generation in progress… wait for it to finish.'); return; } // a summary / lab guide is still being written: do nothing
+    if (files.some((f) => f.state === 'pending')) { toast('Generation in progress… wait for it to finish.'); return false; } // a summary / lab guide is still being written: do nothing
 
     const send = (overwrite) => fetch(`${SERVER}/write`, {
       method: 'POST',
@@ -1372,33 +1379,45 @@
         if (confirm('Keep your text as it is and only update the metadata (frontmatter) of the file?')) return send('metadata');
         throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
       });
-    send(false)
+    return send(false)
       .then((data) => {
         console.log('[Mathesis] saved', data);
         refreshFiles();
         if (data.metadata_only) {
           toast('Only the metadata (frontmatter) was updated. Your text is untouched.');
-          return;
+          return true;
         }
         if (data.kept) { // a file with your own text and no metadata: the server only added the metadata
           toast('This file already existed without metadata, so it was not overwritten: only the metadata (frontmatter) was added, and your text is untouched.');
-          return;
+          return true;
         }
         toast.ok(kind === 'raw' ? 'No standard transcript found: the page HTML was saved as raw (' + data.path + ')'
           : kind === 'quiz-review' ? 'Incorrect and to-review questions saved!'
           : kind === 'quiz-all' ? 'All questions saved!' : 'Transcript sent successfully!');
+        return true;
       })
       .catch(async (error) => {
-        if (error.cancelled) return;
-        if (error.code === 'pending') { toast('Generation in progress… wait for it to finish.'); return; } // another tab started it
+        if (error.cancelled) return false;
+        if (error.code === 'pending') { toast('Generation in progress… wait for it to finish.'); return false; } // another tab started it
         console.error('Error:', error);
-        if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return; } // it went away since the last check
+        if (!error.status) { copyOnly('Could not reach the Mathesis server. '); return false; } // it went away since the last check
         const id = await reportFailure({ kind, path: filePath, status: error.status || null, error: String(error.message || error), body: text });
         toast.error('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
+        return false;
       });
   }
-  async function saveJson() {
-    const text = await getQuizJson();
+  // The "all" button: the whole test as Markdown (NN-all questions.md) and JSON (NN-all questions.json), read from the page once.
+  // Offline, only the Markdown goes to the clipboard (the JSON would replace it there): the json button still copies the JSON.
+  async function saveAll() {
+    const questions = await collectAllQuestions();
+    if (!questions) return;
+    const saved = await copyLesson(true, questions);
+    if (saved && serverUp) await saveJson(questions);
+  }
+  // Nothing to review: no question was answered wrong or marked (a perfect score, or an attempt without answers).
+  const hasReview = () => pills().some((p) => (p.name === 'incorrect' || p.name === 'marked') && p.count > 0);
+  async function saveJson(preloaded) {
+    const text = await getQuizJson(preloaded);
     if (!text) return;
     let filePath;
     try {

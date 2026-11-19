@@ -31,7 +31,7 @@ Open a lesson, lab or quiz-results page. The **μ** panel appears at the top rig
 | Document lesson      | lesson               | the lesson as Markdown                                               |
 | Lab                  | lab                  | lab text, plus a lab guide if AI is on                               |
 | Quiz (Google Skills) | quiz                 | the quiz as Markdown                                                 |
-| Udemy quiz results   | to review, all, json | the wrong and marked questions, or every question (Markdown or JSON) |
+| Udemy quiz results   | to review, all, json | the wrong and marked questions, or every question (**all** saves the Markdown and the JSON; **json** the JSON alone) |
 
 - Saved files are listed in the panel: click to open (Obsidian or your text editor); **⋯** has copy content, copy path, show in folder and, for summaries and lab guides, **Regenerate**.
 - If the server is down the buttons say *Copy*: the text goes to the clipboard and is kept as an offline copy in the browser, to send later.
