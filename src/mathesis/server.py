@@ -48,6 +48,7 @@ from .reports import ReportStore
 from .pipeline import summary_path, write_summary
 from . import pageinspect as inspect_mode
 from .files import Jobs, page_files
+from . import domains as exam_domains
 from .lessons import is_derived
 from .userscripts import list_scripts, render_page
 
@@ -180,7 +181,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             print("LLM features: off (no summaries, no lab guides, no provider is contacted); files are only saved")
         complained = set()
         for role, enabled, what in [("summary", settings.summary_enabled, "Summaries"),
-                                    ("lab_guide", settings.lab_guide_enabled, "Lab guides")]:
+                                    ("lab_guide", settings.lab_guide_enabled, "Lab guides"),
+                                    ("domains", settings.domains_enabled, "Exam domains")]:
             if not enabled:
                 print(f"{what}: off")
                 continue
@@ -409,9 +411,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         kind = (x_mathesis_kind or "transcript").strip().lower()
         if kind == "raw" and target.suffix != ".html":
             raise ApiError(400, "raw saves must use an .html path")
-        busy = [k for k in ("summary", "lab-guide") if (jobs.get(target, k) or {}).get("state") == "pending"]
+        busy = [k for k in ("summary", "lab-guide", "domains") if (jobs.get(target, k) or {}).get("state") == "pending"]
         if busy:   # a second click while the AI is still writing: do nothing (no second job, and the file under the job is not touched)
-            raise ApiError(409, "generation in progress: the summary / lab guide of this page is still being written", "pending")
+            raise ApiError(409, "generation in progress: the summary / lab guide / exam domains of this page are still being written", "pending")
         content = await request.body()
         if kind == "bundle":
             try:
@@ -451,6 +453,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             background.add_task(jobs.run, target, "summary", summary_path(target), write_summary, text, str(target), settings)
         if settings.lab_guide_enabled and content.strip() and kind == "lab":  # own thread: the summary may take minutes
             start_lab_guide(target, text)
+        if kind == "quiz-json" and settings.domains_enabled and exam_domains.needs_domains(content):  # own thread: it searches the web
+            jobs.start(target, "domains")
+            threading.Thread(target=jobs.run, args=(target, "domains", target, exam_domains.write_domains, str(target), settings),
+                             daemon=True).start()
         # kept: the file existed without frontmatter, so only the metadata was added and its text was left alone
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind,
                 "kept": kept}

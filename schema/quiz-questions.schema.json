@@ -44,6 +44,34 @@
       "type": "string",
       "description": "The sentence the time limit was read from, empty when timeLimitMinutes is null."
     },
+    "syllabus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "certification",
+        "url",
+        "domains"
+      ],
+      "description": "Where the guessed domains come from: the certification and the official syllabus page the model read (see docs/reference.md). Only present when some question's domain was guessed.",
+      "properties": {
+        "certification": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domains": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "questions": {
       "type": "array",
       "minItems": 1,
@@ -76,6 +104,11 @@
         "domain": {
           "type": "string",
           "description": "Exam domain label, empty when the quiz has none."
+        },
+        "domainGuessed": {
+          "type": "boolean",
+          "const": true,
+          "description": "Present (true) when the domain was not on Udemy's page but guessed by the model from the syllabus named in the file's `syllabus`."
         },
         "question": {
           "type": "string",

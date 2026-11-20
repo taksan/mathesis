@@ -40,6 +40,7 @@ KNOWN_KEYS = {
                "obsidian_open", "obsidian_command", "editor_command"},
     "summary": {"enabled", "provider", "model", "pipeline", "max_revisions"},
     "lab_guide": {"enabled", "provider", "model", "check_commands"},
+    "domains": {"enabled", "provider", "model"},
 }
 
 
@@ -148,6 +149,9 @@ class Settings:
     summary_model: str | None = None       # overrides the provider's model for summaries
     lab_provider: str = "claude-code"      # resolved, same choices; "none" = no lab guides
     lab_model: str | None = None           # overrides the provider's model for lab guides
+    domains: bool = True                   # quiz JSON files get a guessed exam domain for the questions that have none (needs a provider)
+    domains_provider: str = "none"         # resolved like the others, but without a built-in choice: only a provider you set is used
+    domains_model: str | None = None       # overrides the provider's model for domains
     providers: dict = field(default_factory=dict)  # [providers.<name>] tables from the config file (not ollama / claude-code)
     configured_providers: tuple = ()       # names of every [providers.<name>] table in the file that sets something
     config_path: Path | None = None        # the config file in use
@@ -160,6 +164,10 @@ class Settings:
     @property
     def lab_guide_enabled(self) -> bool:
         return self.llm and self.lab_guide and self.lab_provider != "none"
+
+    @property
+    def domains_enabled(self) -> bool:
+        return self.llm and self.domains and self.domains_provider != "none"
 
     def provider_spec(self, name: str, model: str | None = None) -> dict:
         """Everything needed to build the client of provider `name` (built-in defaults < settings < config tables)."""
@@ -194,14 +202,14 @@ class Settings:
         """Providers the file configures that neither summaries nor lab guides use (a forgotten `provider = ...` line)."""
         if not self.llm:  # no LLM at all: the providers in the file are simply parked
             return []
-        return sorted(set(self.configured_providers) - {self.summary_provider, self.lab_provider})
+        return sorted(set(self.configured_providers) - {self.summary_provider, self.lab_provider, self.domains_provider})
 
     def validate(self) -> "Settings":
         if self.inspect and self.host not in ("127.0.0.1", "localhost", "::1"):
             raise ConfigError("--inspect shows page contents to whoever holds the token: it only runs on a loopback host (127.0.0.1)")
         if not self.llm:  # nothing will call a provider, so a missing key or a typo in one does not matter
             return self
-        for provider in {self.default_provider, self.summary_provider, self.lab_provider} - {None, "none"}:
+        for provider in {self.default_provider, self.summary_provider, self.lab_provider, self.domains_provider} - {None, "none"}:
             self.provider_spec(provider)
         return self
 
@@ -210,7 +218,7 @@ class Settings:
         path = find_config(config)
         load_dotenv((path.parent if path else DEFAULT_CONFIG.parent) / ".env")  # keys; before anything reads the environment
         raw = read_config(path) if path else {}
-        server, summary, lab = raw.get("server", {}), raw.get("summary", {}), raw.get("lab_guide", {})
+        server, summary, lab, dom = raw.get("server", {}), raw.get("summary", {}), raw.get("lab_guide", {}), raw.get("domains", {})
         tables = dict(raw.get("providers", {}))
         ollama, claude = tables.pop("ollama", {}), tables.pop("claude-code", {})
         e = os.environ.get
@@ -258,6 +266,9 @@ class Settings:
             summary_model=summary.get("model") or None,
             lab_provider=e("MATHESIS_LAB_PROVIDER") or lab.get("provider") or default or cls.lab_provider,
             lab_model=lab.get("model") or None,
+            domains=flag("MATHESIS_DOMAINS", dom.get("enabled"), True),
+            domains_provider=e("MATHESIS_DOMAINS_PROVIDER") or dom.get("provider") or default or cls.domains_provider,
+            domains_model=dom.get("model") or None,
             providers=tables,
             configured_providers=tuple(n for n, t in raw.get("providers", {}).items() if t),
             config_path=path,

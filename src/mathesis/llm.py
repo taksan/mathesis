@@ -156,9 +156,10 @@ class ClaudeCodeClient:
 
 
 def make_client(settings: Settings, role: str, run=subprocess.run):
-    """The client for "summary" or "lab_guide"; None when that job's provider is "none". Raises ConfigError."""
-    name, model = ((settings.summary_provider, settings.summary_model) if role == "summary"
-                   else (settings.lab_provider, settings.lab_model))
+    """The client for "summary", "lab_guide" or "domains"; None when that job's provider is "none". Raises ConfigError."""
+    name, model = {"summary": (settings.summary_provider, settings.summary_model),
+                   "lab_guide": (settings.lab_provider, settings.lab_model),
+                   "domains": (settings.domains_provider, settings.domains_model)}[role]
     if name == "none":
         return None
     spec = settings.provider_spec(name, model)

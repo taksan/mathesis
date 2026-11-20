@@ -82,6 +82,7 @@ API keys are never stored in the config: export `GEMINI_API_KEY` / `OPENAI_API_K
 | `MATHESIS_SUMMARY_PROVIDER`, `MATHESIS_LAB_PROVIDER` | the provider above                      | per job (`none` = off)                    |
 | `MATHESIS_MODEL`, `MATHESIS_OLLAMA_URL`              | `gemma4:12b`, `http://172.17.0.1:11434` | Ollama model and address                  |
 | `MATHESIS_HOST`, `MATHESIS_PORT`                     | `127.0.0.1`, `5000`                     | server address                            |
+| `MATHESIS_DOMAINS_PROVIDER`                          | the default provider                    | provider that guesses the exam domain of quiz questions Udemy gave none (from the official syllabus, found on the web once and cached); `MATHESIS_DOMAINS=0` turns it off |
 | `MATHESIS_LAB_CHECK`                                 | off                                     | `1`: lab-guide commands are checked against the installed `gcloud --help` and fixed (any provider); slower, needs `gcloud` |
 | `MATHESIS_NOTIFY`                                    | on                                      | desktop notifications                     |
 | `MATHESIS_OBSIDIAN`, `MATHESIS_EDITOR`               | auto-detected                           | how notes are opened                      |

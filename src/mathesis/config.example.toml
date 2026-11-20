@@ -29,6 +29,16 @@
 #                          # Claude Code additionally may read `gcloud ... --help` (nothing else; no account, no project) before it writes
 #                          # each command, so flags are the real ones. Slower and costs more; needs gcloud installed. MATHESIS_LAB_CHECK=1
 
+[domains]
+# Quiz JSON files (Udemy) whose questions have no exam domain get a guessed one, from the certification's OFFICIAL syllabus: the model
+# works out the certification, finds its exam guide (it searches the web for the guide; only public https pages are read, HTML or
+# PDF with `pdftotext`), and files each question under one of the guide's domains. The syllabus is built once and kept in
+# ~/.cache/mathesis/syllabi (delete a file there to build it again). Guessed questions say "domainGuessed": true.
+# Runs only when a provider is set: the one at the top of this file, or here. No built-in choice.
+# provider = "gemini"
+# model = "..."
+# enabled = true
+
 [server]
 # host = "127.0.0.1"
 # port = 5000

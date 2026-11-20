@@ -1,0 +1,3 @@
+Several official syllabus documents were found for the same certification (different versions of its exam guide). Pick the one the practice test below most likely prepares for: look at the course name and the test title for a year, "new", "updated", a version or a date, and at what each document says about its own version.
+
+You get the course, the test title and a numbered list of candidate documents. Reply with ONE JSON object and nothing else: {"choice": <the number of the best candidate>}

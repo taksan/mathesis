@@ -192,7 +192,8 @@ def cmd_doctor(args) -> int:
         report(None, f"[providers.{name}] is configured but not used: set provider = \"{name}\" at the top of the file")
     report(None if s.config_path is None else True,
            f"config file: {s.config_path or 'none (defaults; mathesis config --init writes an example)'}")
-    for what, enabled, role in [("summaries", s.summary_enabled, "summary"), ("lab guides", s.lab_guide_enabled, "lab_guide")]:
+    for what, enabled, role in [("summaries", s.summary_enabled, "summary"), ("lab guides", s.lab_guide_enabled, "lab_guide"),
+                              ("exam domains", s.domains_enabled, "domains")]:
         client = make_client(s, role) if enabled else None
         if client is None:
             report(None, f"{what}: off")
@@ -219,7 +220,7 @@ def cmd_doctor(args) -> int:
         sock.settimeout(0.5)
         busy = sock.connect_ex((s.host, s.port)) == 0
     report(None if busy else True, f"port {s.port} " + ("is already in use (another server running?)" if busy else "is free"))
-    print(f"\nsummary={s.summary_provider} lab_guide={s.lab_provider} pipeline={s.pipeline} "
+    print(f"\nsummary={s.summary_provider} lab_guide={s.lab_provider} domains={s.domains_provider} pipeline={s.pipeline} "
           f"max_revisions={s.max_revisions} ollama={s.model} num_ctx={s.num_ctx}")
     if args.click_test:
         bad += _click_test(s)
@@ -263,7 +264,8 @@ def cmd_config(args) -> int:
         print("LLM features: off (llm = false / MATHESIS_LLM=0 / --no-llm): no summaries, no lab guides")
         return 0
     print(f"default provider: {s.default_provider or 'none set (built-in: ollama for summaries, claude-code for lab guides)'}")
-    for what, provider, model in [("summaries", s.summary_provider, s.summary_model), ("lab guides", s.lab_provider, s.lab_model)]:
+    for what, provider, model in [("summaries", s.summary_provider, s.summary_model), ("lab guides", s.lab_provider, s.lab_model),
+                            ("exam domains", s.domains_provider, s.domains_model)]:
         if provider == "none":
             print(f"{what}: off")
             continue

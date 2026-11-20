@@ -71,6 +71,10 @@ def page_files(target: Path, root: Path, jobs: Jobs, obsidian: bool) -> list[dic
                                   ("json", "All questions (JSON)", f"{num}-all questions.json")]:
             if (folder / name).is_file():
                 out.append(entry(kind, label, folder / name))
+        job = jobs.get(folder / f"{num}-all questions.json", "domains")   # the exam domains being added to the JSON (or failed)
+        if job:
+            out.append(entry("domains", "Exam domains", folder / f"{num}-all questions.json", job["state"],
+                             **({"error": job["error"]} if "error" in job else {}), regenerating=True))
         return out
 
     for kind, label, path in [("lab-guide", "Lab guide", guide_path(target)), ("summary", "Summary", summary_path(target))]:
