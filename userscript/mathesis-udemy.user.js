@@ -104,7 +104,7 @@
   }
 
   // The course's instructor(s). Udemy's course-taking pages carry them as JSON in the app's data-module-args (every page, not only
-  // the overview tab); the instructor block of the overview tab is the fallback. '' when the page has neither.
+  // the overview tab; the quiz results page does not have them); the instructor profile on the page is the fallback. '' when neither.
   function courseAuthor() {
     try {
       for (const el of document.querySelectorAll('[data-module-args]')) {
@@ -115,8 +115,13 @@
         if (names.length) return names.join(', ');
       }
     } catch (e) { /* not JSON: try the page */ }
-    const link = document.querySelector('[data-purpose="instructor-bio"] a[href*="/user/"]');
-    return link ? link.textContent.trim() : '';
+    // Page fallbacks, most reliable first: the instructor profile link (also on the quiz results page), the older bio block, then the
+    // name shown on instructor replies.
+    for (const sel of ['a[data-purpose="instructor-url"]', '[data-purpose="instructor-bio"] a[href*="/user/"]', '[data-purpose="instructor-name"]']) {
+      const names = [...new Set([...document.querySelectorAll(sel)].map((e) => e.textContent.trim()).filter(Boolean))];
+      if (names.length) return names.join(', ');
+    }
+    return '';
   }
 
   // Goes to the server for the frontmatter of the Markdown file (the server adds the file type and the hash itself).
