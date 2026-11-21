@@ -13,6 +13,9 @@ from .pipeline import summary_path
 QUIZ_NAME = re.compile(r"^(?P<num>\d+)-(?P<kind>incorrect|all questions)(?: \(attempt (?P<attempt>\d+)\))?\.(?P<ext>md|json)$")
 
 
+ATTEMPT_NAME = re.compile(r"^(?P<num>\d+)-attempt (?P<attempt>\d+)\.json$")   # the attempt file for the quiz platform (attempts.py)
+
+
 class Jobs:
     """Summaries and lab guides being written by this server process, and the ones that failed.
 
@@ -71,6 +74,13 @@ def page_files(target: Path, root: Path, jobs: Jobs, obsidian: bool) -> list[dic
                                   ("json", "All questions (JSON)", f"{num}-all questions.json")]:
             if (folder / name).is_file():
                 out.append(entry(kind, label, folder / name))
+        imports = []
+        for f in folder.glob(f"{num}-attempt *.json"):
+            m = ATTEMPT_NAME.match(f.name)
+            if m and m["num"] == num:
+                imports.append((int(m["attempt"]), f))
+        for n, f in sorted(imports, reverse=True):
+            out.append(entry("import", f"Attempt {n} (import)", f, attempt=n))
         job = jobs.get(folder / f"{num}-all questions.json", "domains")   # the exam domains being added to the JSON (or failed)
         if job:
             out.append(entry("domains", "Exam domains", folder / f"{num}-all questions.json", job["state"],

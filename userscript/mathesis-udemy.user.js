@@ -688,6 +688,9 @@
     { chip: 'json', kinds: ['json'], save: saveJson,
       tipOn: 'Saves every question as a JSON file (options, correct answers, explanations) for other tools. Overwrites the previous file.',
       tipOff: 'Copies every question as JSON to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
+    { chip: 'attempt', kinds: ['import'], save: saveAttempt,
+      tipOn: "Saves this attempt (what you answered, the questions you marked, when it was taken) as NN-attempt N.json, in the import format of the quiz platform. The dates come from Udemy's API. Import NN-all questions.json there first: the attempt finds its quiz by the hash of that file. Overwrites the previous file.",
+      tipOff: 'Copies this attempt in the quiz platform import format to the clipboard. The server is offline: an offline copy is kept in this browser, and nothing reaches your notes.' },
   ] : [
     { chip: 'transcript', kinds: ['transcript'], save: () => copyLesson(false),
       tipOn: 'Saves the transcript of this lesson as a Markdown note and writes a summary in the background. Saving again overwrites it.',
@@ -809,7 +812,7 @@
   }
 
   const displayName = (f) => ({
-    incorrect: `to review · attempt ${f.attempt || 1}`, all: 'all questions', json: 'all questions (json)',
+    incorrect: `to review · attempt ${f.attempt || 1}`, all: 'all questions', json: 'all questions (json)', import: `attempt ${f.attempt || 1} (import)`,
     'lab-guide': 'lab guide', summary: 'summary', transcript: transcriptName(),
   }[f.kind] || f.label.toLowerCase());
   const via = (f) => (f.opener === 'obsidian' ? 'Obsidian' : 'your text editor');
@@ -818,7 +821,7 @@
   // They are copies, not files in your notes: copy their content, download them, or send them
   // to the server once it is back. Stored per site (localStorage), one key per file.
   const OFF = 'mathesis-offline:';
-  const offlineKinds = { 'quiz-review': 'incorrect', 'quiz-all': 'all', 'quiz-json': 'json', transcript: 'transcript', bundle: 'transcript', lab: 'transcript', quiz: 'transcript' };
+  const offlineKinds = { 'quiz-review': 'incorrect', 'quiz-all': 'all', 'quiz-json': 'json', 'quiz-attempt': 'import', transcript: 'transcript', bundle: 'transcript', lab: 'transcript', quiz: 'transcript' };
   const offlineName = (e) => displayName({ kind: offlineKinds[e.kind] || 'transcript', attempt: parseInt((e.path.match(/\(attempt (\d+)\)/) || [])[1], 10) || 1, label: e.path });
   function offlineAll() {
     const out = [];
@@ -1479,6 +1482,136 @@
       console.error('Error:', error);
       if (!error.status) { copyJson('Could not reach the Mathesis server. '); return; } // it went away since the last check
       const id = await reportFailure({ kind: 'quiz-json', path: filePath, status: error.status, error: String(error.message || error), body: text });
+      toast.error('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
+    }
+  }
+
+  // ---- the attempt, for the quiz platform (QuickQuiz import): "NN-attempt N.json" ----
+  // Format: schema/quickquiz-attempts.schema.json. What the results page knows: the options you chose ("Your answer"), the questions
+  // you marked (the "marked" filter) and the attempt's id (the number in the URL). Udemy does not show when you took it, so the dates
+  // come from Udemy's quiz API (the same session, nothing leaves the browser); without them the file says "now" and 0 seconds.
+  const resultIds = () => {
+    const m = location.pathname.match(/\/learn\/quiz\/(\d+)\/result\/(\d+)/);
+    return m ? { quizId: m[1], attemptId: m[2] } : null;
+  };
+
+  async function markedNumbers() {
+    const all = pills();
+    const marked = all.find((p) => p.name === 'marked');
+    const previous = all.find((p) => p.input.checked);
+    if (!marked || !marked.count) return [];
+    try {
+      if (!(await selectPill(marked))) toast(`Could not show exactly the ${marked.count} marked questions; the marked list may be incomplete.`);
+      const numbers = statusLabels().map((l) => parseInt((paneOf(l).textContent.match(/Question\s*(\d+)/) || [])[1], 10)).filter(Boolean);
+      return [...new Set(numbers)].sort((a, b) => a - b);
+    } finally {
+      if (previous && !previous.input.checked) previous.label.click();
+    }
+  }
+
+  // The attempt's record in Udemy's API: { startedAt, finishedAt, timeUsedSeconds } as ISO strings / seconds, or null. The field names are
+  // not documented, so the record is searched for date-like values by name; what was found is logged to the console.
+  const isoOf = (record, names) => {
+    for (const n of names) {
+      const t = Date.parse(record[n]);
+      if (typeof record[n] === 'string' && !Number.isNaN(t)) return new Date(t).toISOString();
+    }
+    return null;
+  };
+  async function attemptTimes(ids) {
+    const base = `/api-2.0/quizzes/${ids.quizId}/user-attempted-quizzes/`;
+    for (const query of ['?version=1&page_size=100&fields[user_attempted_quiz]=id,created,viewed_time,completion_time,version', '?version=1&page_size=100']) {
+      try {
+        let url = base + query, record = null;
+        for (let page = 0; url && !record && page < 10; page++) {
+          const r = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
+          if (!r.ok) break;
+          const data = await r.json();
+          record = (data.results || []).find((x) => String(x.id) === ids.attemptId) || null;
+          url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null;
+        }
+        if (!record) continue;
+        console.log('[Mathesis] attempt record from Udemy', record);
+        const startedAt = isoOf(record, ['created', 'started_time', 'created_time', 'start_time']);
+        const finishedAt = isoOf(record, ['completion_time', 'completed_time', 'finished_time', 'finish_time', 'submitted_time', 'modified']);
+        if (!startedAt || !finishedAt) continue;
+        const used = Math.round((Date.parse(finishedAt) - Date.parse(startedAt)) / 1000);
+        return { startedAt, finishedAt, timeUsedSeconds: used >= 0 ? used : 0 };
+      } catch (e) { console.warn('[Mathesis] could not read the attempt from Udemy', e); }
+    }
+    return null;
+  }
+
+  function attemptName() {
+    const n = attemptNumber();
+    return n ? jsonPathToWrite().replace(/all questions\.json$/, `attempt ${n}.json`) : null;
+  }
+
+  // The attempt in the platform's import format. The quiz is named by its title: the server adds the hash from the saved quiz JSON.
+  async function getAttemptJson(questions, ids) {
+    const answers = {};
+    questions.forEach((q) => {
+      const chosen = q.answers.map((a, i) => (a.selected ? i : -1)).filter((i) => i >= 0);
+      const multi = q.answers.filter((a) => a.correct).length > 1;
+      if (q.number && chosen.length) answers[String(q.number)] = multi ? chosen : chosen.slice(0, 1);
+    });
+    const times = await attemptTimes(ids);
+    const now = new Date().toISOString();
+    if (!times) toast("Udemy's API did not give this attempt's dates: the file says it was taken now and took 0 seconds. Edit startedAt, finishedAt and timeUsedSeconds if you need them.");
+    return JSON.stringify({
+      format: 'quickquiz-attempts',
+      version: 1,
+      exportedAt: now,
+      attempts: [{
+        id: `udemy-${ids.attemptId}`,
+        quiz: { title: lessonFileName().title },
+        ...(times || { startedAt: now, finishedAt: now, timeUsedSeconds: 0 }),
+        finishReason: 'submitted',
+        answers,
+        marked: await markedNumbers(),
+        comments: {},
+      }],
+    }, null, 2) + '\n';
+  }
+
+  async function saveAttempt() {
+    const ids = resultIds();
+    const filePath = attemptName();
+    if (!ids || !filePath) {
+      toast.error('Could not find the attempt ("Attempt N" and the result id in the address) on this page. Try again once the results have loaded.');
+      return;
+    }
+    const questions = await collectAllQuestions();
+    if (!questions) return;
+    // the server takes the quiz hash from NN-all questions.json: make sure it exists
+    if (serverUp && !files.some((f) => f.kind === 'json' && f.state === 'ready')) await saveJson(questions);
+    const text = await getAttemptJson(questions, ids);
+    const copyAttempt = (why) => {
+      const kept = keepOffline('quiz-attempt', filePath, text); // an offline copy in this browser, and the clipboard
+      return navigator.clipboard.writeText(text)
+        .then(() => toast.ok(why + 'Copied the attempt to the clipboard' + (kept ? ' and kept as an offline copy in this browser (see the panel).' : '.')))
+        .catch((e) => toast.error('Could not copy text to clipboard: ' + e));
+    };
+    if (!serverUp) { copyAttempt(''); return; }
+    try {
+      const response = await fetch(`${SERVER}/write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', 'X-File-Path': encodeURIComponent(filePath), 'X-Mathesis-Kind': 'quiz-attempt' },
+        body: text,
+      });
+      if (!response.ok) {
+        const d = await response.json().catch(() => ({}));
+        throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status });
+      }
+      const data = await response.json();
+      console.log('[Mathesis] saved', data);
+      refreshFiles();
+      toast.ok('Attempt saved for the quiz platform! (' + data.path + ')' + (data.quiz === 'hash' ? ''
+        : '\nNo saved quiz JSON with this title next to it, so the quiz is matched by title: import it first.'));
+    } catch (error) {
+      console.error('Error:', error);
+      if (!error.status) { copyAttempt('Could not reach the Mathesis server. '); return; }
+      const id = await reportFailure({ kind: 'quiz-attempt', path: filePath, status: error.status, error: String(error.message || error), body: text });
       toast.error('Could not send: ' + error + (id ? '\n\nError report: ' + id + ' (tell Claude this ID)' : ''));
     }
   }

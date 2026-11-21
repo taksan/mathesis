@@ -49,6 +49,7 @@ from .pipeline import summary_path, write_summary
 from . import pageinspect as inspect_mode
 from .files import Jobs, page_files
 from . import domains as exam_domains
+from . import attempts as quiz_attempts
 from .lessons import is_derived
 from .userscripts import list_scripts, render_page
 
@@ -309,6 +310,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not target.is_file():
             raise ApiError(404, "this file is not saved")
         main = target.with_name(re.sub(r"-(summary|lab-guide)\.md$", ".md", target.name))  # a summary belongs to its lesson
+        if re.match(r"\d+-attempt \d+\.json$", target.name):                                  # an attempt, to its quiz
+            main = quiz_attempts.quiz_file_for(target)
         if str(target.relative_to(settings.root)) not in {f["path"] for f in listing(main)}:
             raise ApiError(403, "not a file Mathesis wrote for a page")
         return target
@@ -421,7 +424,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except bundle.BundleError as e:
                 notify("Lesson conversion failed", f"{target.name}: {e.message}", error=True, enabled=settings.notify)
                 raise ApiError(e.status, e.message)
-        written, kept = content, False
+        written, kept, hashed = content, False, None
+        if kind == "quiz-attempt":   # the attempt file of the quiz platform: the userscript names the quiz by title, the hash comes from the saved quiz
+            if target.suffix != ".json":
+                raise ApiError(400, "attempts must use a .json path")
+            try:
+                content, hashed = quiz_attempts.add_hash(content, quiz_attempts.quiz_file_for(target))
+            except (ValueError, UnicodeDecodeError):
+                raise ApiError(400, "the attempt is not valid JSON")
+            written = content
         if kind in FILE_TYPES and target.suffix == ".md":  # frontmatter: type, course, lesson, url, hash of the body
             try:
                 existing = target.read_text(encoding="utf-8") if target.is_file() else None
@@ -459,7 +470,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                              daemon=True).start()
         # kept: the file existed without frontmatter, so only the metadata was added and its text was left alone
         return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": len(content), "kind": kind,
-                "kept": kept}
+                "kept": kept, **({"quiz": hashed} if hashed else {})}
 
     return app
 
