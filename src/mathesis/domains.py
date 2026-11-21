@@ -12,7 +12,9 @@ provider), the server fills in the missing ones after the JSON is saved, and onl
 The syllabus is built once and kept (~/.cache/mathesis/syllabi/<certification>.json, never expired; delete the file to build it again),
 and each course folder is remembered with its certification (courses.json there), so every later test of that course, and of any
 course for the same exam, reuses it: no identification, no search, no page read. Questions that already have a domain are never touched. Each question the model tagged gets `"domainGuessed": true`, and the file records
-where the syllabus came from in `"syllabus"`: the official names are Udemy's own labels' alternative, not a replacement.
+where the syllabus came from in `"syllabus"`: the official names are Udemy's own labels' alternative, not a replacement,
+except that a domain the quiz already names (its other questions carry Udemy's label for it, often reworded or cut off) is written with
+that label, so one quiz does not call the same area by two names (`align`; `"syllabus"` keeps the official names).
 """
 import json
 import os
@@ -241,6 +243,39 @@ def classify(client, syllabus: dict, questions: list[tuple[int, dict]]) -> dict[
     return result
 
 
+def quiz_labels(data: dict) -> list[str]:
+    """The domain labels Udemy's page gave the quiz's questions, most used first (guessed ones do not count)."""
+    count: dict[str, int] = {}
+    for q in data.get("questions", []):
+        label = str(q.get("domain") or "").strip()
+        if label and not q.get("domainGuessed"):
+            count[label] = count.get(label, 0) + 1
+    return sorted(count, key=lambda k: -count[k])
+
+
+def align(client, syllabus: dict, labels: list[str]) -> dict[str, str]:
+    """{official domain name: the quiz's own label for it}, so guessed questions are spelled like the ones Udemy tagged.
+    Only matches the model is sure of; a domain with no label keeps its official name."""
+    if not labels:
+        return {}
+    domains = syllabus["domains"]
+    user = ("Official domains:\n" + "\n".join(f"{i + 1}. {d['name']}" for i, d in enumerate(domains)) +
+            "\n\nLabels used in the practice test:\n" + "\n".join(f"{i + 1}. {label}" for i, label in enumerate(labels)))
+    try:
+        answers = parse_json(client.chat(prompt("domains_align.txt"), user, 0.0), list)
+    except ValueError:
+        return {}
+    result: dict[str, str] = {}
+    for a in answers:
+        try:
+            k, m = int(a["domain"]), a.get("label")
+            if m is not None and 1 <= k <= len(domains) and 1 <= int(m) <= len(labels) and labels[int(m) - 1] not in result.values():
+                result.setdefault(domains[k - 1]["name"], labels[int(m) - 1])
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return result
+
+
 def add_domains(data: dict, course: str, client, fetch=webtext.fetch_text, search=webtext.search,
                 cache_dir: Path = CACHE_DIR, say=print) -> int:
     """Fill the missing domains of `data` in place (see the module doc). Returns how many questions got one."""
@@ -259,8 +294,9 @@ def add_domains(data: dict, course: str, client, fetch=webtext.fetch_text, searc
     placed = classify(client, syllabus, [(i, data["questions"][i]) for i in todo])
     if not placed:
         raise DomainError("the model placed no question in a domain of the syllabus")
+    own = align(client, syllabus, quiz_labels(data))     # the quiz's own spelling where it has one
     for i, name in placed.items():
-        data["questions"][i]["domain"] = name
+        data["questions"][i]["domain"] = own.get(name, name)
         data["questions"][i]["domainGuessed"] = True
     questions = data.pop("questions")
     data.pop("syllabus", None)

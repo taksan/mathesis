@@ -35,6 +35,7 @@ class Model:
                                   "Section 2: Building and implementing CI/CD pipelines",
                                   "Section 3: Applying site reliability engineering practices"]
         self.placement = placement or {}
+        self.alignment = []
         self.calls = []
 
     def check(self):
@@ -53,6 +54,9 @@ class Model:
             self.calls.append("classify")
             ids = [int(x.split("]")[0]) for x in user.split("[id ")[1:]]
             return json.dumps([{"id": i, "domain": self.placement.get(i, 2)} for i in ids])
+        if "match the domains" in system:
+            self.calls.append("align")
+            return json.dumps(self.alignment)
         raise AssertionError("unexpected prompt: " + system[:60])
 
 
@@ -87,6 +91,36 @@ def test_only_questions_without_a_domain_are_filled_and_marked(tmp_path):
     assert list(data)[-2:] == ["syllabus", "questions"]            # the record sits just before the questions
     assert data["syllabus"] == {"certification": "Google Cloud Professional Cloud DevOps Engineer", "url": OFFICIAL,
                                 "domains": model.names}
+
+
+def test_guessed_domains_use_the_label_the_quiz_already_has_for_that_area(tmp_path):
+    data = quiz("Bootstrapping and maintaining a Google Cl")       # Udemy's label: reworded and cut off
+    model = Model(placement={1: 1, 2: 2, 3: 3})
+    model.alignment = [{"domain": 1, "label": 1}, {"domain": 2, "label": None}, {"domain": 3, "label": 7}]   # 7 is not a label
+    domains.add_domains(data, "Course", model, pages({OFFICIAL: GUIDE}), lambda q: [], tmp_path, say=lambda m: None)
+    got = [q["domain"] for q in data["questions"]]
+    assert got[0] == got[1] == "Bootstrapping and maintaining a Google Cl"          # same area, same spelling
+    assert got[2].startswith("Section 2") and got[3].startswith("Section 3")        # no label for them: official names
+    assert data["syllabus"]["domains"] == model.names and "align" in model.calls
+
+
+def test_a_label_is_not_given_to_two_domains_and_an_unreadable_alignment_changes_nothing(tmp_path):
+    data = quiz("Own label")
+    model = Model(placement={1: 1, 2: 2, 3: 3})
+    model.alignment = [{"domain": 1, "label": 1}, {"domain": 2, "label": 1}]
+    domains.add_domains(data, "Course", model, pages({OFFICIAL: GUIDE}), lambda q: [], tmp_path, say=lambda m: None)
+    assert [q["domain"] for q in data["questions"]][1:3] == ["Own label", model.names[1]]
+    plain = quiz("Own label")
+    broken = Model(placement={1: 1, 2: 2, 3: 3})
+    broken.alignment = "not a list"
+    domains.add_domains(plain, "Course", broken, pages({OFFICIAL: GUIDE}), lambda q: [], tmp_path, say=lambda m: None)
+    assert plain["questions"][1]["domain"] == model.names[0]
+
+
+def test_no_alignment_call_when_the_quiz_has_no_labels(tmp_path):
+    model = Model()
+    domains.add_domains(quiz(), "Course", model, pages({OFFICIAL: GUIDE}), lambda q: [], tmp_path, say=lambda m: None)
+    assert "align" not in model.calls
 
 
 def test_a_domain_name_that_is_not_on_the_page_is_dropped(tmp_path):
