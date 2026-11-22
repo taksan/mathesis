@@ -214,6 +214,24 @@
   const statusLabels = () => [...document.querySelectorAll(STATUS)];
   const isQuizReview = () => statusLabels().length > 0;
 
+  // The text of a code block with its lines. Udemy separates them with <br>, or with one <p>/<div>/<li> per line, which `textContent`
+  // drops (every block came out as one line); its indentation is non-breaking spaces. A line that is only a space stays a blank line.
+  function codeText(pre) {
+    let out = '';
+    const walk = (x) => {
+      if (x.nodeType === 3) { out += x.textContent; return; }
+      if (x.nodeType !== 1) return;
+      const tag = x.tagName.toLowerCase();
+      if (tag === 'br') { out += '\n'; return; }
+      const block = tag === 'p' || tag === 'div' || tag === 'li' || tag === 'tr';
+      if (block && out && !out.endsWith('\n')) out += '\n';
+      [...x.childNodes].forEach(walk);
+      if (block && !out.endsWith('\n')) out += '\n';
+    };
+    walk(pre);
+    return out.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').replace(/^\n+/, '').trimEnd();
+  }
+
   // Rich text (question, options, explanations) -> Markdown.
   function mdNode(n) {
     if (n.nodeType === 3) return n.textContent.replace(/\s+/g, ' ');
@@ -233,7 +251,7 @@
       }
       case 'br': return '\n';
       case 'img': return /^https?:/.test(n.src) ? `![${n.alt || ''}](${n.src})` : '';
-      case 'pre': return '\n\n```\n' + n.textContent.trim() + '\n```\n\n';
+      case 'pre': return '\n\n```\n' + codeText(n) + '\n```\n\n';
       case 'p': case 'div': return '\n\n' + kids().trim() + '\n\n';
       case 'ul': case 'ol': {
         const items = [...n.children].filter((c) => c.tagName === 'LI').map((li, i) => {
