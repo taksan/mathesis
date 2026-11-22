@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  // Files land in <BASE_DIR>/<course>/<NN-lesson>.md under the server's MATHESIS_ROOT (where that is on disk is the server's business).
+  // Files land in <BASE_DIR>/<author>/<course>/<NN-lesson>.md under the server's MATHESIS_ROOT (where that is on disk is the server's business).
   const BASE_DIR = 'Udemy';
   const SERVER = 'http://127.0.0.1:5000';
 
@@ -103,26 +103,43 @@
     return { title: name, prefix, base: `${prefix}${normalizeName(name)}` };
   }
 
-  // The course's instructor(s). Udemy's course-taking pages carry them as JSON in the app's data-module-args (every page, not only
-  // the overview tab; the quiz results page does not have them); the instructor profile on the page is the fallback. '' when neither.
-  function courseAuthor() {
+  // The course's instructor(s), as Udemy shows them. Udemy's course-taking pages carry them as JSON in the app's data-module-args (every
+  // page, not only the overview tab; the quiz results page does not have them); the instructor profile on the page is the fallback.
+  // [] when neither is there.
+  function courseAuthors() {
     try {
       for (const el of document.querySelectorAll('[data-module-args]')) {
         const raw = el.getAttribute('data-module-args');
         if (!raw.includes('instructors_info')) continue;
         const list = (JSON.parse(raw).instructorInfo || {}).instructors_info || [];
         const names = list.map((i) => String(i.display_name || i.title || '').trim()).filter(Boolean);
-        if (names.length) return names.join(', ');
+        if (names.length) return names;
       }
     } catch (e) { /* not JSON: try the page */ }
     // Page fallbacks, most reliable first: the instructor profile link (also on the quiz results page), the older bio block, then the
     // name shown on instructor replies.
     for (const sel of ['a[data-purpose="instructor-url"]', '[data-purpose="instructor-bio"] a[href*="/user/"]', '[data-purpose="instructor-name"]']) {
       const names = [...new Set([...document.querySelectorAll(sel)].map((e) => e.textContent.trim()).filter(Boolean))];
-      if (names.length) return names.join(', ');
+      if (names.length) return names;
     }
-    return '';
+    return [];
   }
+  const courseAuthor = () => courseAuthors().join(', ');
+
+  // Courses are filed under their author: Udemy/<author>/<course>/. The folder is the first instructor's name without the tagline after
+  // a bar ("Priya Dwivedi | CertShield Academy" -> "Priya Dwivedi"). Not every page shows the instructor, so the folder found for a
+  // course is remembered in this browser: a page without one reuses it instead of filing the same course somewhere else. Never found:
+  // "unknown author" (scripts/organize-udemy-by-author.py moves such a course once its author is known).
+  const UNKNOWN_AUTHOR = 'unknown author';
+  const authorFolder = () => {
+    const slug = (location.pathname.match(/\/course\/([^/]+)/) || [])[1] || '';
+    const key = 'mathesis-author-folder:' + slug;
+    const found = normalizeName((courseAuthors()[0] || '').split(/\s+\|\s+/)[0]).replace(/^\.+|\.+$/g, '');
+    try {
+      if (found) { localStorage.setItem(key, found); return found; }
+      return localStorage.getItem(key) || UNKNOWN_AUTHOR;
+    } catch (e) { return found || UNKNOWN_AUTHOR; } // storage blocked: not remembered
+  };
 
   // Goes to the server for the frontmatter of the Markdown file (the server adds the file type and the hash itself).
   function metaHeader() {
@@ -143,9 +160,9 @@
     if (isQuizReview()) {
       const n = attemptNumber();
       const suffix = allQuestions ? 'all questions' : n >= 2 ? `incorrect (attempt ${n})` : 'incorrect';
-      return `${BASE_DIR}/${courseName()}/${prefix}${suffix}.md`;
+      return `${BASE_DIR}/${authorFolder()}/${courseName()}/${prefix}${suffix}.md`;
     }
-    return `${BASE_DIR}/${courseName()}/${base}.md`;
+    return `${BASE_DIR}/${authorFolder()}/${courseName()}/${base}.md`;
   }
 
   // ---- transcript ----
