@@ -500,6 +500,7 @@
     #mathesis-fold { background: none; border: none; color: #9aa0a6; cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
     #mathesis-fold:hover { color: #e8eaed; }
     #mathesis-status { color: #9aa8bb; font-size: 12px; margin-top: -2px; }
+    #mathesis-warn { color: #f9ab00; font-size: 15px; line-height: 1; cursor: help; }
     #mathesis-spinner { display: none; width: 12px; height: 12px; flex: none; border: 2px solid #46536a; border-top-color: #8ab4f8;
       border-radius: 50%; animation: mathesis-spin 0.8s linear infinite; }
     @keyframes mathesis-spin { to { transform: rotate(360deg); } }
@@ -1202,7 +1203,18 @@
   // Server offline: the only status text there is, with a retry link just after it.
   function showStatus(offline, again) {
     statusEl.textContent = '';
-    if (!offline) { if (!pageRecognised()) statusEl.textContent = '⚠ ' + WARN_NOTE; return; }
+    if (!offline) { // an unrecognised page: just a warning sign (the message is long and would stretch the panel); hover for it
+      if (!pageRecognised()) {
+        const icon = document.createElement('span');
+        icon.id = 'mathesis-warn';
+        icon.tabIndex = 0;
+        icon.textContent = '⚠';
+        icon.setAttribute('role', 'img');
+        tipOn(icon, WARN_NOTE);
+        statusEl.append(icon);
+      }
+      return;
+    }
     statusEl.append(document.createTextNode(again ? 'Server still offline ' : 'Server offline '));
     const retry = document.createElement('button');
     retry.type = 'button';
