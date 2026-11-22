@@ -3,6 +3,7 @@
 The hash is of the text after the frontmatter, so editing only the metadata never changes it, and a note typed into the body
 does. Anything in the frontmatter that Mathesis does not own (keys the person added) is kept as it is.
 """
+import difflib
 import hashlib
 import json
 import re
@@ -30,6 +31,20 @@ def body_hash(body: str) -> str:
     """Hash of the body. Line endings and trailing whitespace are ignored, so an editor that adds or drops the final newline does
     not look like an edit."""
     return "sha256:" + hashlib.sha256(body.replace("\r\n", "\n").rstrip().encode("utf-8")).hexdigest()
+
+
+def diff(on_disk: str, new: str, max_lines: int = 300, max_width: int = 240) -> str:
+    """What saving would change in a file the person edited: a unified diff of the bodies (frontmatter left out), from the file as it is
+    to the text about to replace it. A line starting with "-" is in the file now and would be gone (their notes, when they only typed
+    into it); "+" would be new. Long diffs and long lines are cut. Empty when the bodies are the same."""
+    def clip(line: str) -> str:
+        return line if len(line) <= max_width else line[:max_width - 1] + "…"
+    a = [clip(l) for l in strip(on_disk).replace("\r\n", "\n").rstrip().split("\n")]
+    b = [clip(l) for l in strip(new).replace("\r\n", "\n").rstrip().split("\n")]
+    lines = list(difflib.unified_diff(a, b, "in your notes now", "this save", n=2, lineterm=""))
+    if len(lines) > max_lines:
+        lines = lines[:max_lines] + [f"… {len(lines) - max_lines} more lines of the diff"]
+    return "\n".join(lines)
 
 
 def is_modified(text: str) -> bool:

@@ -409,10 +409,23 @@ def test_a_file_edited_after_saving_asks_before_it_is_overwritten(client):
     assert client.get("/status", headers=h).json()["modified"] is True
     r = client.post("/write", content=b"# newest\n", headers=h)
     assert r.status_code == 409 and r.json()["code"] == "modified"
+    diff = r.json()["diff"]                                                                # what saving would change, to show the person
+    assert "-My note: remember this." in diff and "-# again" in diff and "+# newest" in diff
     assert "My note" in f.read_text()                                                      # nothing was overwritten
     ok = client.post("/write", content=b"# newest\n", headers={**h, "X-Mathesis-Overwrite": "yes"})
     assert ok.status_code == 200 and body(f) == "# newest\n"
     assert client.get("/status", headers=h).json()["modified"] is False
+
+
+def test_the_diff_shows_the_notes_that_saving_would_remove_and_is_cut_when_long():
+    on_disk = '---\ntype: "lab"\nhash: "sha256:x"\n---\n# Lab\nstep one\nmy note\nstep two\n'
+    d = frontmatter.diff(on_disk, "# Lab\nstep one\nstep two\nstep three\n")
+    assert "--- in your notes now" in d and "+++ this save" in d
+    assert "-my note" in d and "+step three" in d and "type:" not in d             # the frontmatter is not part of it
+    assert frontmatter.diff(on_disk, "# Lab\nstep one\nmy note\nstep two\n") == ""
+    long = frontmatter.diff("a\n", "\n".join(f"line {i}" for i in range(1000)), max_lines=20)
+    assert long.splitlines()[-1].startswith("… ") and len(long.splitlines()) == 21
+    assert max(len(l) for l in frontmatter.diff("a\n", "x" * 5000).splitlines()) <= 241
 
 
 def test_only_a_changed_body_counts_as_an_edit():

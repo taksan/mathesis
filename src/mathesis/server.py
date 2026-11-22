@@ -5,7 +5,7 @@ POST /write   Header X-File-Path: .md file path relative to MATHESIS_ROOT; body:
               Markdown files get YAML frontmatter (type, course, author, lesson, url, hash of the body). A file that already exists without
               frontmatter is not overwritten: the frontmatter is added and the rest is left as it is ("kept": true in the answer).
               A file whose body no longer matches the hash in its frontmatter (the person added notes) is not overwritten either:
-              409 {"error", "code": "modified"} unless the request has X-Mathesis-Overwrite: yes (replace it) or metadata (keep the
+              409 {"error", "code": "modified", "diff"} (what saving would change, a unified diff) unless the request has X-Mathesis-Overwrite: yes (replace it) or metadata (keep the
               text, only update the frontmatter: "metadata_only": true in the answer)
               409 {"code": "pending"} while a summary / lab guide of that file is still being written: nothing is saved or started
               Header X-Mathesis-Kind: "transcript" (default, gets a summary); "bundle" (body = the lesson iframe URL; the server
@@ -55,8 +55,8 @@ from .userscripts import list_scripts, render_page
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, message: str, code: str | None = None):
-        self.status, self.message, self.code = status, message, code
+    def __init__(self, status: int, message: str, code: str | None = None, **extra):
+        self.status, self.message, self.code, self.extra = status, message, code, extra
 
 
 PAGE_ORIGINS = re.compile(r"^https://([a-z0-9-]+\.)*(udemy\.com|skills\.google|cloudskillsboost\.google)$")   # the sites the userscripts run on
@@ -206,7 +206,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(ApiError)
     async def api_error_handler(request: Request, exc: ApiError):
-        return JSONResponse({"error": exc.message, **({"code": exc.code} if exc.code else {})}, status_code=exc.status)
+        return JSONResponse({"error": exc.message, **({"code": exc.code} if exc.code else {}), **exc.extra}, status_code=exc.status)
 
     def target_path(raw_path: str | None) -> Path:
         """X-File-Path is relative to the configured root ("Google Skills/Path/Course/01-Lesson.md")."""
@@ -444,7 +444,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     return {"status": "ok", "path": str(target.relative_to(settings.root)), "bytes": 0, "kind": kind,
                             "kept": True, "metadata_only": True}
                 if existing is not None and frontmatter.is_modified(existing) and mode != "yes":
-                    raise ApiError(409, "this file was changed after it was saved (your notes?): saving would overwrite them", "modified")
+                    raise ApiError(409, "this file was changed after it was saved (your notes?): saving would overwrite them", "modified",
+                                   diff=frontmatter.diff(existing, content.decode("utf-8")))
                 text, kept = frontmatter.apply(existing, content.decode("utf-8"), page_meta(x_mathesis_meta, kind, target))
                 written = text.encode("utf-8")
             except UnicodeDecodeError:

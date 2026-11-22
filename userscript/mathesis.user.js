@@ -654,6 +654,60 @@
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  // The file in the notes was edited after the server wrote it (409 "modified"): show what saving would change and ask. `diff` is a
+  // unified diff from the file as it is to the text about to replace it ("-" lines would be lost: usually the person's notes).
+  // Resolves to 'yes' (overwrite), 'metadata' (keep the text, update the frontmatter) or null (cancel). Without a diff: plain prompts.
+  function askModified(diff, text) {
+    if (!diff) {
+      if (confirm(text + ' Overwrite them?')) return Promise.resolve('yes');
+      return Promise.resolve(confirm('Keep your text as it is and only update the metadata (frontmatter) of the file?') ? 'metadata' : null);
+    }
+    return new Promise((resolve) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;font:13px/1.4 system-ui,sans-serif';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#252e3b;color:#e6ebf2;border:1px solid #3b4658;border-radius:12px;padding:16px;width:min(900px,92vw);max-height:86vh;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,.5)';
+      const title = document.createElement('div');
+      title.style.cssText = 'font-weight:600;font-size:14px';
+      title.textContent = 'This file was changed after it was saved';
+      const note = document.createElement('div');
+      note.style.color = '#9aa8bb';
+      const lines = diff.split('\n');
+      const removed = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+      const added = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
+      note.textContent = `Saving would remove ${removed} line(s) now in your notes (red) and add ${added} (green). `
+        + 'Lines you typed into the file show up as removed.';
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'margin:0;overflow:auto;background:#151a21;border-radius:8px;padding:10px;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;flex:1';
+      lines.forEach((l) => {
+        const row = document.createElement('div');
+        row.textContent = l || ' ';
+        if (l.startsWith('+') && !l.startsWith('+++')) { row.style.color = '#7ee2a0'; row.style.background = 'rgba(52,168,83,.16)'; }
+        else if (l.startsWith('-') && !l.startsWith('---')) { row.style.color = '#ff9b95'; row.style.background = 'rgba(234,67,53,.16)'; }
+        else if (l.startsWith('@@') || l.startsWith('---') || l.startsWith('+++')) row.style.color = '#8ab4f8';
+        else row.style.color = '#b8c0cc';
+        pre.appendChild(row);
+      });
+      const buttons = document.createElement('div');
+      buttons.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap';
+      const done = (value) => { wrap.remove(); document.removeEventListener('keydown', onKey, true); resolve(value); };
+      const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(null); } };
+      const button = (label, value, primary) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText = `cursor:pointer;border-radius:8px;padding:7px 12px;border:1px solid #46536a;background:${primary ? '#8ab4f8' : 'transparent'};color:${primary ? '#10151c' : '#e6ebf2'};font-weight:600`;
+        b.addEventListener('click', () => done(value));
+        return b;
+      };
+      buttons.append(button('Cancel', null), button('Keep my text, update only the metadata', 'metadata'), button('Overwrite', 'yes', true));
+      box.append(title, note, pre, buttons);
+      wrap.appendChild(box);
+      document.addEventListener('keydown', onKey, true);
+      document.body.appendChild(wrap);
+      buttons.firstChild.focus();
+    });
+  }
+
   async function uploadOffline(e, overwrite) {
     try {
       const r = await fetch(`${SERVER}/write`, {
@@ -664,8 +718,8 @@
       });
       const d = await r.json().catch(() => ({}));
       if (r.status === 409 && d.code === 'modified') { // the file in your notes has changes the server did not write
-        if (confirm('The file in your notes was changed after it was saved (your notes?). Sending this copy will overwrite those changes. Overwrite them?')) return uploadOffline(e, 'yes');
-        if (confirm('Keep the text of that file as it is and only update its metadata (frontmatter)?')) return uploadOffline(e, 'metadata');
+        const choice = await askModified(d.diff, 'The file in your notes was changed after it was saved (your notes?). Sending this copy will overwrite those changes.');
+        if (choice) return uploadOffline(e, choice);
         say('Not sent: the offline copy is still here.');
         return;
       }
@@ -1185,16 +1239,17 @@
     })
       .then((response) => {
         if (!response.ok) { // show the server's reason (it answers {"error": "...", "code": "..."})
-          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status, code: d.code }); });
+          return response.json().catch(() => ({})).then((d) => { throw Object.assign(new Error(d.error || response.status + ' ' + response.statusText), { status: response.status, code: d.code, diff: d.diff }); });
         }
         return response.json();
       })
       .catch((error) => {
         // the file has notes in it (its body no longer matches the hash in its frontmatter): ask, then save over them
         if (error.code !== 'modified') throw error;
-        if (confirm('The file was changed after it was saved (your notes?). Saving will overwrite those changes. Overwrite them?')) return send('yes');
-        if (confirm('Keep your text as it is and only update the metadata (frontmatter) of the file?')) return send('metadata');
-        throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
+        return askModified(error.diff, 'The file was changed after it was saved (your notes?). Saving will overwrite those changes.').then((choice) => {
+          if (choice) return send(choice);
+          throw Object.assign(new Error('cancelled'), { cancelled: true }); // declined: nothing is saved, and it is not an error
+        });
       });
     send(false)
       .then((data) => {
