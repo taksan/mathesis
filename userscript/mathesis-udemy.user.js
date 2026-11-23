@@ -737,6 +737,19 @@
   const pageKey = () => pagePath().replace(/ \(attempt \d+\)(?=\.md$)/, ''); // every attempt of a quiz belongs to the same page // quiz results: the review file; the server finds its siblings and attempts
   const statusOf = (filePath) => fetch(`${SERVER}/status`, { headers: { 'X-File-Path': encodeURIComponent(filePath) } }).then((r) => r.json());
 
+  // What a quiz chip covers, from the page's filter pills ("26 questions"); nothing on other pages.
+  const chipCount = (spec) => {
+    if (!isQuizReview()) return '';
+    const count = (name) => (pills().find((p) => p.name === name) || {}).count;
+    const noun = (n) => `${n} question${n === 1 ? '' : 's'}`;
+    if (spec.chip === 'to review') {
+      const wrong = count('incorrect') || 0, marked = count('marked') || 0;
+      return wrong || marked ? `${wrong} incorrect, ${marked} marked` : '';
+    }
+    const total = count('all');
+    return total ? noun(total) : '';
+  };
+
   // ---- save chips on top, one row per file below (click a name to open it, "⋯" for the rest) ----
   // `rowSpecs()`, `pagePath()` and `transcriptName()` come from the page type (above). The server (GET /files) says what exists, what is
   // still being written (summary, lab guide) and which program opens each file, so this script never guesses a file name.
@@ -1175,7 +1188,8 @@
       }
       chip.append(document.createTextNode(spec.chip));
       chip.addEventListener('click', spec.save);
-      tipOn(chip, serverUp ? spec.tipOn : spec.tipOff);
+      const tip = serverUp ? spec.tipOn : spec.tipOff;
+      tipOn(chip, () => { const n = chipCount(spec); return (n ? n + '. ' : '') + tip; });
       chips.append(chip);
     }
     saveEl.append(label, chips);
