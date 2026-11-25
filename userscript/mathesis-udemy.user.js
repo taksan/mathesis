@@ -249,11 +249,112 @@
     return out.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').replace(/^\n+/, '').trimEnd();
   }
 
+  // Code that the course author typed as plain paragraphs (one <p> per line, no <pre>): Udemy shows it as prose, with the indentation
+  // collapsed by the browser, but the spaces are still in the text. A run of such paragraphs is fenced when it looks like code. No AI:
+  // the rules are conservative (a run needs a STRONG sign: indentation, a shell command, a code keyword, a bracket line; weak signs
+  // - a `key:` line, a `- ` item, a trailing comma or bracket, a quoted string - only count next to a strong one), and prose between
+  // two code lines ends the run. Pure functions, between the markers, are what tests/test_udemy_fences.py runs in node.
+  // <code-in-paragraphs>
+  const CODE_COMMAND = /^(?:\$ |#!|(?:sudo|gcloud|gsutil|kubectl|docker|git|curl|wget|pip3?|python3?|npm|npx|yarn|terraform|helm|bq|apt(?:-get)?|echo|export|cd|ls|cat|chmod|mkdir)\s)/;
+  const CODE_KEYWORD = /^(?:def |class |import |from \S+ import |func |function |const |let |var |return\b|SELECT |INSERT |UPDATE |CREATE |DELETE FROM )|^[[{}\]]/;
+  const CODE_WEAK = /^\s*-?\s*[\w.-]+:(?:\s|$)|^\s*-\s+\S|[,;{}[\]()]$|^\s*['"]/;
+  const INDENTED = /^(?: {2,}|\t)\S/;
+
+  // 'blank' | 'cmd' (a shell command) | 'strong' | 'weak' | null (prose) for one line
+  function lineKind(raw) {
+    const line = raw.replace(/\u00a0/g, ' ');
+    if (!line.trim()) return 'blank';
+    if (line.length > 240) return null;
+    if (CODE_COMMAND.test(line.trim())) return 'cmd';
+    if (INDENTED.test(line) || CODE_KEYWORD.test(line.trim())) return 'strong';
+    return CODE_WEAK.test(line) ? 'weak' : null;
+  }
+
+  // items: one array of lines per paragraph (null: not plain text). Returns [{start, end, lang}] over paragraph indexes.
+  function codeSegments(items) {
+    const kinds = items.map((lines) => {
+      if (!lines) return null;
+      const ks = lines.map(lineKind);
+      if (ks.some((k) => k === null)) return null;
+      return ks.includes('cmd') ? 'cmd' : ks.includes('strong') ? 'strong' : ks.includes('weak') ? 'weak' : 'blank';
+    });
+    const out = [];
+    for (let i = 0; i < items.length;) {
+      if (!kinds[i] || kinds[i] === 'blank') { i++; continue; }
+      let last = i;
+      for (let j = i; j < items.length && kinds[j]; j++) if (kinds[j] !== 'blank') last = j;
+      const run = kinds.slice(i, last + 1), lines = items.slice(i, last + 1).flat();
+      const real = lines.filter((l) => l.trim()), count = real.length;
+      // one line alone has to be a shell command that does not read like a sentence
+      const lone = count === 1 && run.includes('cmd') && !/[.?!:]$/.test(real[0].trim());
+      if ((count >= 2 && (run.includes('strong') || run.includes('cmd'))) || lone) {
+        out.push({ start: i, end: last, lang: guessLanguage(lines) });
+      }
+      i = last + 1;
+    }
+    return out;
+  }
+
+  function guessLanguage(lines) {
+    const real = lines.filter((l) => l.trim()), first = real[0].trim();
+    if (/^(?:\$ |gcloud |gsutil |kubectl |docker |git |curl |sudo |bq |terraform |helm |export |echo )/.test(first)) return 'bash';
+    if (/^[[{]/.test(first) && /[\]}]$/.test(real[real.length - 1].trim())) return 'json';
+    if (real.filter((l) => /^\s*-?\s*[\w.-]+:(?:\s|$)|^\s*-\s+\S/.test(l)).length * 2 >= real.length) return 'yaml';
+    if (/^(?:def |class |import |from \S+ import )/.test(first)) return 'python';
+    if (/^(?:SELECT|INSERT|UPDATE|CREATE|DELETE FROM) /.test(first)) return 'sql';
+    return '';
+  }
+
+  // A fenced block for these lines: the common indentation removed, blank lines at most one at a time, none at the ends.
+  function fencedBlock(lines, lang) {
+    const text = lines.map((l) => l.replace(/\u00a0/g, ' ').replace(/[ \t]+$/, ''));
+    const indents = text.filter((l) => l.trim()).map((l) => l.match(/^[ \t]*/)[0].length);
+    const cut = indents.length ? Math.min(...indents) : 0;
+    const body = text.map((l) => l.slice(cut)).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+    const ticks = body.includes('```') ? '````' : '```';
+    return `\n\n${ticks}${lang}\n${body}\n${ticks}\n\n`;
+  }
+  // </code-in-paragraphs>
+
+  let fenceParagraphs = true;   // off for the option texts, which are kept on one line
+  const isP = (x) => x.nodeType === 1 && x.tagName.toLowerCase() === 'p';
+  // the lines of a plain paragraph, spaces kept; null when it holds anything but text and <br>: a sentence with `inline code`, bold
+  // or a link is prose (code typed as plain paragraphs has none of those)
+  const paragraphLines = (p) => ([...p.children].some((c) => c.tagName.toLowerCase() !== 'br') ? null : codeText(p).split('\n'));
+
+  // The paragraphs of one run (consecutive <p> siblings) -> Markdown, with the code ones fenced.
+  function paragraphsMd(run) {
+    const segments = fenceParagraphs && run.length ? codeSegments(run.map(paragraphLines)) : [];
+    let out = '';
+    for (let i = 0; i < run.length;) {
+      const seg = segments.find((s) => s.start === i);
+      if (!seg) { out += mdNode(run[i]); i++; continue; }
+      out += fencedBlock(run.slice(seg.start, seg.end + 1).flatMap(paragraphLines), seg.lang);
+      i = seg.end + 1;
+    }
+    return out;
+  }
+
+  // The Markdown of a node's children, the runs of <p> going through paragraphsMd.
+  function childrenMd(n) {
+    const nodes = [...n.childNodes];
+    let out = '';
+    for (let i = 0; i < nodes.length;) {
+      if (!isP(nodes[i])) { out += mdNode(nodes[i]); i++; continue; }
+      const run = [];
+      for (; i < nodes.length && (isP(nodes[i]) || (nodes[i].nodeType === 3 && !nodes[i].textContent.trim())); i++) {
+        if (isP(nodes[i])) run.push(nodes[i]);
+      }
+      out += paragraphsMd(run);
+    }
+    return out;
+  }
+
   // Rich text (question, options, explanations) -> Markdown.
   function mdNode(n) {
     if (n.nodeType === 3) return n.textContent.replace(/\s+/g, ' ');
     if (n.nodeType !== 1) return '';
-    const kids = () => [...n.childNodes].map(mdNode).join('');
+    const kids = () => childrenMd(n);
     const wrap = (mark, t) => {
       const lead = t.match(/^\s*/)[0], trail = t.match(/\s*$/)[0], core = t.trim();
       return core ? lead + mark + core + mark + trail : t;
@@ -282,7 +383,10 @@
   }
   const toMarkdown = (el) => (el ? mdNode(el).replace(/\*\*(\s*`[^`\n]+`\s*)\*\*/g, '$1') // bold split around inline code
     .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : '');
-  const oneLine = (el) => toMarkdown(el).replace(/\s*\n+\s*/g, ' ');
+  const oneLine = (el) => {
+    fenceParagraphs = false;   // an option's text is one line: no fenced block in it
+    try { return toMarkdown(el).replace(/\s*\n+\s*/g, ' '); } finally { fenceParagraphs = true; }
+  };
   const quote = (text) => text.split('\n').map((l) => (l ? '> ' + l : '>')).join('\n');
 
   // The filter pills: "60 all", "34 correct", "26 incorrect", "0 skipped", "28 marked".
